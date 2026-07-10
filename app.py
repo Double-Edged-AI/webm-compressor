@@ -278,16 +278,16 @@ class WebMCompressorApp(ctk.CTk):
         
         # 1. Elegant Minimal Logo
         logo_label = ctk.CTkLabel(
-            sidebar, 
-            text="Double-Edged AI", 
+            sidebar,
+            text="WebM Compressor",
             font=ctk.CTkFont(family="SF Pro Display", size=20, weight="bold"),
             text_color="#FFFFFF"
         )
         logo_label.pack(padx=20, pady=(25, 2), anchor="w")
-        
+
         subtitle_label = ctk.CTkLabel(
-            sidebar, 
-            text="VIDEO COMPRESSION ENGINE", 
+            sidebar,
+            text="A DOUBLE-EDGED AI PROJECT",
             font=ctk.CTkFont(family="SF Pro Text", size=9, weight="bold"),
             text_color="#8E8E93"
         )
@@ -438,7 +438,7 @@ class WebMCompressorApp(ctk.CTk):
         
         self.output_entry = ctk.CTkEntry(
             sidebar,
-            placeholder_text="Default (Double-Edged AI folder)",
+            placeholder_text="Default (WebM Compressor folder)",
             fg_color="#1C1C1E",
             border_color="#3A3A3C",
             text_color="#FFFFFF"
@@ -881,17 +881,17 @@ class WebMCompressorApp(ctk.CTk):
 
     def get_default_output_dir(self):
         if sys.platform == "win32":
-            path = os.path.join(os.environ.get("USERPROFILE", "C:\\"), "Videos", "Double-Edged AI Compressed")
+            path = os.path.join(os.environ.get("USERPROFILE", "C:\\"), "Videos", "WebM Compressor")
         else:
             home = os.path.expanduser("~")
             if os.path.exists(os.path.join(home, "Videos")):
-                path = os.path.join(home, "Videos", "Double-Edged AI Compressed")
+                path = os.path.join(home, "Videos", "WebM Compressor")
             elif os.path.exists(os.path.join(home, "Movies")):
-                path = os.path.join(home, "Movies", "Double-Edged AI Compressed")
+                path = os.path.join(home, "Movies", "WebM Compressor")
             elif os.path.exists(os.path.join(home, "Downloads")):
-                path = os.path.join(home, "Downloads", "Double-Edged AI Compressed")
+                path = os.path.join(home, "Downloads", "WebM Compressor")
             else:
-                path = os.path.join(home, "Double-Edged AI Compressed")
+                path = os.path.join(home, "WebM Compressor")
         return os.path.abspath(path)
 
     def get_unique_output_path(self, base_dir, original_name, target_extension):
