@@ -60,14 +60,14 @@ FFmpeg is fetched automatically on first run (official **LGPL** build from [BtbN
 
 ## 📦 Install (users)
 
-1. Grab the latest zip from [Releases](https://github.com/dimanthasehan80-blip/webm-compressor/releases)
+1. Grab the latest zip from [Releases](https://github.com/Double-Edged-AI/webm-compressor/releases)
 2. Unzip and run `WebM_Compressor.exe`
 3. Accept the one-time FFmpeg download prompt — done ✅
 
 ## 🛠️ Run / build from source (developers)
 
 ```bash
-git clone https://github.com/dimanthasehan80-blip/webm-compressor
+git clone https://github.com/Double-Edged-AI/webm-compressor
 cd webm-compressor
 pip install -r requirements.txt
 python app.py                # run the app
