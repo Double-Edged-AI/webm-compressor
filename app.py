@@ -241,7 +241,7 @@ class WebMCompressorApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Double-Edged AI Video Compressor")
+        self.title("WebM Compressor — Double-Edged AI")
         self.geometry("1100x740")
         self.minsize(1020, 680)
         
