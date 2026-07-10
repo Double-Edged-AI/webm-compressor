@@ -7,11 +7,31 @@
 
 ## Why this exists
 
-There are plenty of FFmpeg front-ends. This one focuses on **WebM done well**:
+There are plenty of FFmpeg front-ends and online converters. This one focuses on **WebM done well** — here's what it does that the others don't:
 
-- **Hybrid GPU acceleration** — even on GPUs that *can't* hardware-encode AV1 (e.g. NVIDIA RTX 30-series and older), it still uses the GPU for **decode + scaling** (NVDEC / CUDA / QSV / D3D11VA) and only runs the AV1/VP9 encode on the CPU. You get GPU speedups where your hardware allows them, and correct output where it doesn't — with automatic pure-CPU fallback if anything fails.
-- **Royalty-free stack** — VP9, AV1, and Opus only. No H.264/HEVC patent baggage.
-- **Correct output by default** — forced `yuv420p` (10-bit opt-in), HDR color-tag preservation, VFR-safe timestamps, WebM-only container enforcement with post-encode verification.
+> *The only WebM compressor that uses your GPU even when your GPU "can't" — private, local, and impossible to get a broken file out of.*
+
+### 🆚 vs. HandBrake / Shutter Encoder / VidCoder
+
+- 🎯 **Does one thing perfectly** — WebM only. No confusing wall of 50 formats and codecs, and you can't produce a broken or wrong-format file: every output is re-verified as valid WebM/VP9/AV1/Opus after encoding.
+- ⚡ **Hybrid GPU pipeline (the killer feature)** — on GPUs that *can't* hardware-encode AV1/VP9 (that's most GPUs, including NVIDIA RTX 30-series and older), other tools silently fall back to 100% CPU. This app still uses the GPU for **decode + scaling** (NVDEC / CUDA / QSV / D3D11VA) and only runs the encode on the CPU — with automatic pure-CPU retry if anything fails.
+- 🖥️ **Smart hardware detection** — it *probes* your GPU with a real test encode instead of trusting a device list. RTX 40+ / Intel Arc / RX 7000+ get true hardware AV1; older cards get hybrid; no-GPU machines get CPU. Zero settings to understand.
+- 🎨 **Correctness that free tools get wrong** — forced `yuv420p` (no unplayable files from 4:2:2 camera footage), HDR color-tag preservation (no washed-out output), VFR-safe timestamps (no audio desync from phone recordings), safe stream mapping (iPhone/GoPro files with data tracks don't crash the encode).
+
+### 🌐 vs. online converters (CloudConvert, FreeConvert, …)
+
+- 🔒 **100% local & private** — your video never leaves your PC. No uploading personal or client footage to someone else's server.
+- 💸 **No file-size limits, no queues, no subscription** — online tools cap free files and throttle you.
+- 🚀 **Faster for real files** — no upload/download time; a 4 GB video starts compressing instantly.
+
+### ⌨️ vs. raw FFmpeg on the command line
+
+- 🧠 **Expert-tuned commands built in** — `-b:v 0` true constant quality, lag-in-frames/alt-ref lookahead, two-pass VP9, SVT-AV1 speed presets, and automatic quality compensation when hardware encoders are used. Getting all of that right by hand takes days of reading docs.
+- 📊 **Live progress, ETA, predicted file size, batch queue**, and a 5-second preview before you commit to an hour-long encode.
+
+### 📜 The legal angle
+
+- 🆓 **Fully royalty-free stack** — VP9, AV1, and Opus only. No H.264/HEVC patent baggage, and the auto-downloaded FFmpeg build is LGPL, keeping distribution clean.
 
 ## Features
 
