@@ -2,9 +2,11 @@
 
 ⚔️ *A **Double-Edged AI** project*
 
-**Compress any video to WebM (VP9 / AV1) locally — with GPU acceleration even on GPUs that "can't" hardware-encode WebM.**
+**Compress large educational and course videos into small, smooth-playing WebM files — ready for LMS upload.**
 
-Private, offline, and impossible to get a broken file out of. Free for non-commercial use.
+Built by a video editor, for video editors and educators: lecture recordings, screen-capture courses, and Coursera-style videos are often multi-gigabyte files that LMS platforms choke on and slow connections can't stream. This app shrinks them locally into WebM (VP9/AV1) with quality tuned for course content — so students on slow internet get smooth playback instead of buffering. Private, offline, no file-size limits. Free for non-commercial use.
+
+**Perfect for:** 🎓 LMS uploads · 📚 online course platforms · 🖥️ screen-recorded lectures · 🌍 students on slow connections
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
@@ -42,13 +44,29 @@ Great tools like HandBrake and Shutter Encoder cover every format under the sun.
 
 ## 🚀 Features
 
-- 🎯 Single-pass constant-quality (CRF) encoding to `.webm`, with optional **two-pass VP9**
-- 🎞️ **VP9** (`libvpx-vp9`) and **AV1** (`libsvtav1`, speed preset exposed), audio via **Opus**
-- ⚡ True hardware encoding when available (NVENC AV1, Intel QSV AV1/VP9, AMD AMF AV1, Apple VideoToolbox)
-- 📊 Batch queue with live progress, speed, ETA, and **predicted output size**
+- 🎯 **Compress any input video format to WebM** — MP4, MOV, MKV, AVI, and more in; **WebM-only out**, always
+- 🎓 **LMS-friendly presets** — one-click profiles tuned for course upload, small size, or maximum quality
+- 📦 **Large file support, no artificial size limits** — multi-GB lecture recordings are the design target
+- 🗂️ **Batch queue with per-video selection** — queue many, tick which ones to compress, or run just one
+- 🖱️ **Drag & drop** videos straight into the window
+- ⚡ **CPU/GPU engine choice** — true hardware AV1 on capable GPUs, hybrid GPU-decode acceleration on the rest
+- 📁 **Required, respected save location** — output goes exactly where you choose, originals never touched
+- 📊 **Progress tracking everywhere** — per-file bars, ETA, predicted output size, and real Windows taskbar progress
 - 👀 5-second middle-of-file **quality preview** before committing to an hour-long encode
-- 📐 Resolution presets (1080p / 720p) and audio-only Opus WebM
+- 🎞️ **VP9** (`libvpx-vp9`) and **AV1** (`libsvtav1`) with **Opus** audio; optional two-pass VP9 and 10-bit color
 - 📥 **FFmpeg auto-download on first run** — the official LGPL build, no manual setup
+
+## 🎚️ Output profiles (what to pick)
+
+| Profile | Best for | Output |
+|---|---|---|
+| 🎓 **LMS Upload — VP9 1080p (Recommended)** | Course uploads: the size/quality sweet spot for lectures | 1080p VP9 |
+| 💎 **High Quality — VP9 1080p** | Maximum visual quality, when size matters less | 1080p VP9 |
+| ⚖️ **Balanced — VP9 1080p** | Slightly smaller than LMS with similar quality | 1080p VP9 |
+| 📉 **Small Size — VP9 720p** | Tight storage quotas; screen text still readable | 720p VP9 |
+| 🐌 **Ultra Small — VP9 720p (Slow Internet)** | Students on very slow connections | 720p VP9 |
+| 🧪 **Experimental AV1 — 1080p (Smallest, Slower)** | ~20–30% smaller than VP9, but slower to encode | 1080p AV1 |
+| 🎙️ **Audio Only — Opus (No Video)** | Podcast/audio-lecture versions of a course | Opus audio |
 
 ## 📋 Requirements
 
