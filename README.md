@@ -1,5 +1,7 @@
 # 🎬 WebM Compressor
 
+⚔️ *A **Double-Edged AI** project*
+
 **Compress any video to WebM (VP9 / AV1) locally — with GPU acceleration even on GPUs that "can't" hardware-encode WebM.**
 
 Private, offline, and impossible to get a broken file out of. Free for non-commercial use.
@@ -91,4 +93,12 @@ Issues and pull requests are warmly welcome — see [CONTRIBUTING.md](CONTRIBUTI
 
 This is **source-available**, not OSI "open source": commercial use is restricted. FFmpeg and the codecs it uses are separately licensed — see [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES.md).
 
+---
+
+<div align="center">
+
+⚔️ **Double-Edged AI** — tools cut both ways; we sharpen the right edge.
+
 Copyright © 2026 [dimanthasehan80-blip](https://github.com/dimanthasehan80-blip)
+
+</div>
