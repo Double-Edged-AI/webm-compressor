@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in the app is broken or behaving wrong
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more detail you give, the faster it gets fixed.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: I added a video, pressed Compress, and...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 10 / Windows 11
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU (if the issue is about GPU mode)
+      placeholder: NVIDIA RTX 3060 Ti / Intel Arc / AMD RX 7800 / none
+  - type: textarea
+    id: input-file
+    attributes:
+      label: Input file details
+      description: Format, resolution, and rough size of the video that caused the problem (do not upload private videos).
+      placeholder: 1080p MP4 (H.264), about 2 GB, from OBS screen recording
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error message or pipeline command
+      description: Paste any error dialog text, or the output of the "Pipeline" button if relevant.
+      render: text

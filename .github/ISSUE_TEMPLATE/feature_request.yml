@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A quick reminder before you write: this app is deliberately WebM-only.
+        Requests to add MP4/H.264 output will be closed; that is a core design rule, not an oversight.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation where you needed this, rather than only the solution.
+      placeholder: When I queue 30 lecture files, I would like to...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you tried
+      description: Anything you currently do instead.
