@@ -537,7 +537,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             from PIL import Image
             _img = ctk.CTkImage(
                 Image.open(resource_path(os.path.join("assets", "icon_256.png"))),
-                size=(30, 30)
+                size=(40, 40)
             )
             ctk.CTkLabel(brand, image=_img, text="").pack(side="left", padx=(0, 10))
         except Exception:
@@ -546,14 +546,14 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         _brand_text.pack(side="left")
         ctk.CTkLabel(
             _brand_text, text="WebM Compressor",
-            font=ctk.CTkFont(family="Poppins", size=22, weight="bold"),
-            text_color="#F2F2F4"
-        ).pack(anchor="w")
+            font=ctk.CTkFont(family="Poppins", size=18, weight="bold"),
+            text_color="#F2F2F4", height=16
+        ).pack(anchor="w", pady=0)
         ctk.CTkLabel(
             _brand_text, text="A DOUBLE-EDGED AI PROJECT",
             font=ctk.CTkFont(family="Montserrat", size=10, weight="bold"),
-            text_color="#6E6E78"
-        ).pack(anchor="w")
+            text_color="#6E6E78", height=10
+        ).pack(anchor="w", pady=(1, 0))
 
         def _section(icon_title):
             card = ctk.CTkFrame(sidebar, fg_color="#2B2B39", corner_radius=12)
