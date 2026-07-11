@@ -12,7 +12,7 @@
 ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)
 ![FFmpeg](https://img.shields.io/badge/FFmpeg-LGPL%20build-007808?logo=ffmpeg&logoColor=white)
 
-<!-- ![screenshot](docs/screenshot.png) -->
+![WebM Compressor dashboard mid-encode](docs/screenshot.png)
 
 > ⚠️ **WebM only.** This app exports `.webm` files (VP9/AV1 video, Opus audio) and nothing else. Every finished file is re-verified as valid WebM. If you need MP4 or H.264, use a general-purpose tool like HandBrake; that is not this app's job.
 
