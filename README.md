@@ -28,6 +28,17 @@ Plenty of tools convert video. This one is built around a single, common workflo
 
 Honest note: like most video tools, FFmpeg does the actual encoding under the hood. What this app adds is the workflow: LMS-focused presets, a batch queue with per-file selection, required save location, GPU handling with automatic fallback, and guaranteed WebM output.
 
+### What makes it different
+
+We researched the existing options (HandBrake, Shutter Encoder, WebM GUIs, command-line tools, online compressors) before making these claims:
+
+- **The only actively maintained WebM-focused desktop GUI we know of.** Other desktop tools treat WebM as one checkbox among fifty formats; the one WebM-specific GUI we found is dormant and aimed at short clips.
+- **Built specifically for educational and LMS video workflows.** No other tool we found targets course creators: presets are tuned for lecture and screen-capture content, and the recommended default is simply called LMS Upload.
+- **Offline, private, and uncapped.** Online compressors require uploading course material to a third-party server and cap free file sizes. This app runs entirely on your PC with no size limits.
+- **Output you can trust.** Every finished file is re-verified as valid WebM (container and codecs), and the app refuses to start without a save location or overwrite an original.
+
+What we do not claim: fastest encoder, best quality, or new compression technology. Every serious tool in this space uses the same encoders; the difference here is the workflow and the audience.
+
 ## Features
 
 - 🎯 **Compress any input video format to WebM**: MP4, MOV, MKV, AVI and more in, WebM out, always
