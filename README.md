@@ -2,7 +2,7 @@
 
 ⚔️ *A **Double-Edged AI** project*
 
-**WebM Compressor is a Windows desktop app for compressing large educational videos into smaller WebM files for LMS uploads and online course platforms.** It helps course creators, educators, and video editors reduce file size while keeping playback smooth for students on slower internet connections.
+**Compress any video into WebM (VP9/AV1) on your own PC.** Built for educational content: lecture recordings and screen-capture courses become small, LMS-friendly files that stream smoothly for students on slow internet. Free for non-commercial use.
 
 **Perfect for:** 🎓 LMS uploads · 📚 online course platforms · 🖥️ screen-recorded lectures · 🌍 students on slow connections
 
