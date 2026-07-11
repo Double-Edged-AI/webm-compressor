@@ -70,6 +70,30 @@ PRESETS = {
 # The audio-only preset name is referenced across the UI - single source of truth.
 AUDIO_ONLY_PRESET = "Audio Only - Opus (No Video)"
 
+
+def estimate_typical_output_bitrate(preset_name, crf=None, src_height=1080):
+    """
+    Rough expected output bitrate (bps) for a preset on film-like content.
+    Used to warn when the input is already compressed below what the preset
+    will produce (re-encoding such files usually makes them LARGER).
+    Anchor: measured on this app's own presets - VP9 CRF 32 produced
+    3.1 Mbps on 1920x800 film (Tears of Steel), i.e. ~4.5 Mbps at 1080p.
+    Rate roughly halves per +6 CRF and scales superlinearly with height.
+    """
+    preset = PRESETS.get(preset_name)
+    if not preset or preset["codec"] is None:
+        return 0
+    base_crf = 32
+    if "-crf" in preset["args"]:
+        base_crf = int(preset["args"][preset["args"].index("-crf") + 1])
+    eff_crf = crf if crf is not None else base_crf
+    out_h = preset["resolution"][1] if preset["resolution"] else min(src_height or 1080, 1080)
+    rate = 4_500_000 * (out_h / 1080.0) ** 1.4 * (2 ** ((32 - eff_crf) / 6.0))
+    if preset["codec"] == "libsvtav1":
+        rate *= 0.75  # AV1 needs fewer bits for the same quality
+    return int(rate)
+
+
 def get_ffmpeg_path():
     """
     Finds the absolute path of ffmpeg. Handles Windows and macOS.
@@ -1032,8 +1056,9 @@ class EncodingQueue:
                     if task.progress > 1.0:
                         estimated_total = task.elapsed / (task.progress / 100.0)
                         task.eta = max(0, int(estimated_total - task.elapsed))
-                        
-                        if not is_pass1 and os.path.exists(task.output_path):
+
+                        # Size extrapolation is too noisy below a few percent
+                        if task.progress > 3.0 and not is_pass1 and os.path.exists(task.output_path):
                             curr_size = os.path.getsize(task.output_path)
                             task.est_size_bytes = int(curr_size / (task.progress / 100.0))
                     

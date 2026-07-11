@@ -36,6 +36,7 @@ from encoder import (
     EncoderTask,
     PRESETS,
     AUDIO_ONLY_PRESET,
+    estimate_typical_output_bitrate,
     get_metadata,
     detect_active_hardware_webm_encoders,
     generate_preview
@@ -226,10 +227,16 @@ class TaskRow:
             reduction = 0
             if task.metadata["size_bytes"] > 0:
                 reduction = int(((task.metadata["size_bytes"] - task.est_size_bytes) / task.metadata["size_bytes"]) * 100)
-            self.details_label.configure(
-                text=f"Final Size: {final_size_str} of {orig_size_str} (Saved {reduction}%)  •  Done",
-                text_color="#4EB18C"
-            )
+            if reduction >= 0:
+                self.details_label.configure(
+                    text=f"Final Size: {final_size_str} of {orig_size_str} (Saved {reduction}%)  •  Done",
+                    text_color="#4EB18C"
+                )
+            else:
+                self.details_label.configure(
+                    text=f"Final Size: {final_size_str} of {orig_size_str} (+{abs(reduction)}% LARGER than original)  •  Done",
+                    text_color="#E8574A"
+                )
         else:
             # Update default labels if settings changes occur in real-time
             duration_str = self._format_duration(task.metadata["duration"])
@@ -1459,6 +1466,32 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         two_pass = self.two_pass_cb.get()
         bit10 = self.bit10_cb.get()
         av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
+
+        # Rule 3: warn when an input is already compressed below what this
+        # preset typically produces (re-encoding it usually makes it larger).
+        risky = []
+        for t in selected:
+            in_bps = t.metadata.get("bitrate", 0)
+            expected = estimate_typical_output_bitrate(
+                preset_name, crf_val, t.metadata.get("height", 1080)
+            )
+            if in_bps and expected and in_bps < expected * 0.8:
+                risky.append(os.path.basename(t.input_path))
+        if risky:
+            listing = "\n".join(f"  -  {n}" for n in risky[:5])
+            if len(risky) > 5:
+                listing += f"\n  -  and {len(risky) - 5} more"
+            proceed = messagebox.askyesno(
+                "Already Heavily Compressed",
+                "These videos are already compressed to a very low bitrate:\n\n"
+                f"{listing}\n\n"
+                "At the current quality setting the WebM output will likely be "
+                "SIMILAR OR LARGER than the original. A lower quality or the "
+                "Small Size preset may help, but there may be nothing left to save.\n\n"
+                "Compress anyway?"
+            )
+            if not proceed:
+                return
 
         for task in selected:
             task.preset_name = preset_name
