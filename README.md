@@ -80,7 +80,38 @@ There is nothing to configure. At startup the app tests your GPU with a real one
 
 ## Benchmarks
 
-Coming soon: file-size and quality (VMAF) results from real course videos, plus CPU vs GPU speed comparisons. Early real-world result: a 600 MB course video compressed to roughly 150 MB with no visible quality loss at normal viewing.
+Quality was measured with FFmpeg's libvmaf. **VMAF** is the perceptual quality metric developed by Netflix: it compares the compressed video to the original frame by frame and predicts how similar they look to a human viewer, on a 0-100 scale. A score around 95 or above is generally considered indistinguishable at normal viewing. SSIM and PSNR were also recorded. The 720p outputs are upscaled back to source resolution before scoring, which is the standard method and slightly penalizes them.
+
+Two test sources were used: a typical high-bitrate lecture recording, and the open movie **Tears of Steel** ((CC) Blender Foundation, mango.blender.org). The film is a deliberately hard case: grainy cinematic footage with dark scenes, already compressed to 6.4 Mbps, so there is much less left to squeeze. It is also freely downloadable, so anyone can reproduce these numbers with the same file.
+
+| Source | Preset | Original | Output | Saved | VMAF | Encode time* |
+|---|---|---|---|---|---|---|
+| Lecture recording (1080p H.264, 14.8 Mbps, 6 min) | LMS Upload 1080p | 662 MB | **134 MB** | **80%** | **94.8** | 13 min |
+| Lecture recording | Small Size 720p | 662 MB | 50 MB | 92% | 85.3 | 6 min |
+| Tears of Steel (1080p film, pre-compressed, 12 min) | LMS Upload 1080p | 557 MB | 284 MB | 49% | 73.9 | 25 min |
+| Tears of Steel | Small Size 720p | 557 MB | 95 MB | 83% | 66.2 | 13 min |
+
+\* CPU encoding on an AMD Ryzen 7 3700X, using each preset's default settings.
+
+The pattern to expect: high-bitrate course footage (screen recordings, lecture cameras) compresses dramatically with no visible loss. Sources that are already heavily compressed shrink less, which is normal for any encoder.
+
+**Can you see the difference?** Frames from the Tears of Steel LMS Upload encode, cropped at 2x zoom:
+
+Faces and fine clothing detail:
+
+![Faces and clothing detail](docs/benchmarks/tos_bridge.png)
+
+Skin and hair:
+
+![Skin and hair detail](docs/benchmarks/tos_portrait.png)
+
+Shallow-focus close-up:
+
+![Shallow focus close-up](docs/benchmarks/tos_closeup.png)
+
+End credits, the hardest test, small text stays readable:
+
+![Small text comparison](docs/benchmarks/tos_credits.png)
 
 ## Install (users)
 
