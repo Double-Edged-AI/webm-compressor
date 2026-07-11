@@ -819,7 +819,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         kpis = ctk.CTkFrame(main, fg_color="transparent")
         kpis.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 8))
         for i in range(4):
-            kpis.grid_columnconfigure(i, weight=1)
+            kpis.grid_columnconfigure(i, weight=1, uniform="kpi")
 
         def _kpi(col, title, color):
             card = ctk.CTkFrame(kpis, fg_color="#23232F", corner_radius=12)
@@ -1298,7 +1298,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
             row = TaskRow(
                 self.queue_frame, task, self.remove_task_row,
-                self.generate_quality_preview, selection_callback=self.refresh_start_button
+                self.generate_quality_preview, selection_callback=self._on_selection_toggled
             )
             self.task_rows[task.id] = row
 
@@ -1320,6 +1320,10 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
     def refresh_compressed_tags(self):
         for row in self.task_rows.values():
             row.set_compressed_tag(self._is_already_compressed(row.task))
+
+    def _on_selection_toggled(self):
+        self.refresh_start_button()
+        self.refresh_kpis()
 
     def get_selected_output_dir(self):
         """The user-chosen save folder, or None if not selected yet (required to start)."""
@@ -1729,18 +1733,26 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.kpi_files_n.configure(text=str(len(tasks)))
         self.kpi_files_c.configure(text=f"{n_sel} selected")
 
-        input_total = sum(t.metadata.get("size_bytes", 0) for t in tasks)
-        self.kpi_in_n.configure(text=self._format_size(input_total))
-        self.kpi_in_c.configure(text=f"{len(tasks)} video{'s' if len(tasks) != 1 else ''}")
+        # INPUT / EST. OUTPUT / SAVED describe only what is ticked to run
+        sel = [t for t in tasks if getattr(t, "selected", True)]
+        if not sel:
+            self.kpi_in_n.configure(text="—"); self.kpi_in_c.configure(text="nothing selected")
+            self.kpi_out_n.configure(text="—"); self.kpi_out_c.configure(text=" ")
+            self.kpi_saved_n.configure(text="—", text_color="#F2F2F4"); self.kpi_saved_c.configure(text=" ")
+            return
 
-        known = [(t.metadata.get("size_bytes", 0), t.est_size_bytes) for t in tasks if t.est_size_bytes > 0]
+        input_total = sum(t.metadata.get("size_bytes", 0) for t in sel)
+        self.kpi_in_n.configure(text=self._format_size(input_total))
+        self.kpi_in_c.configure(text=f"{len(sel)} video{'s' if len(sel) != 1 else ''} selected")
+
+        known = [(t.metadata.get("size_bytes", 0), t.est_size_bytes) for t in sel if t.est_size_bytes > 0]
         if known:
             in_known = sum(k[0] for k in known)
             out_known = sum(k[1] for k in known)
-            # extrapolate the measured ratio to files not yet encoded
+            # extrapolate the measured ratio to selected files not yet encoded
             ratio = (out_known / in_known) if in_known else 0
             est_total = out_known + sum(
-                t.metadata.get("size_bytes", 0) * ratio for t in tasks if t.est_size_bytes <= 0
+                t.metadata.get("size_bytes", 0) * ratio for t in sel if t.est_size_bytes <= 0
             )
             self.kpi_out_n.configure(text=f"~{self._format_size(est_total)}")
             self.kpi_out_c.configure(text="WebM output")
