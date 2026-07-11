@@ -54,6 +54,24 @@ def resource_path(relative):
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, relative)
 
+
+# Layout-stability utilities. Tk has no CSS: jitter is prevented structurally.
+# Dynamic values live in FIXED-WIDTH, left-anchored labels (the equivalent of
+# min-width + tabular-nums) inside containers that never follow their content.
+
+def stable_value_label(parent, width, font, color, text=""):
+    """Fixed-width label for values that change at runtime. Never resizes."""
+    return ctk.CTkLabel(parent, text=text, width=width, anchor="w",
+                        font=font, text_color=color)
+
+
+def fmt_speed(raw):
+    """Normalize ffmpeg speed strings (0.651x, 1.2x) to constant-width 0.65x."""
+    try:
+        return "{:.2f}x".format(float(str(raw).rstrip("x")))
+    except Exception:
+        return str(raw)
+
 # Set appearance mode and color theme
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -129,14 +147,19 @@ class TaskRow:
         duration_str = self._format_duration(task.metadata["duration"])
         size_str = self._format_size(task.metadata["size_bytes"])
         profile_text = task.preset_name.replace(" WebM", "") + (" (GPU)" if task.use_gpu else " (CPU)")
-        self.details_label = ctk.CTkLabel(
-            self.left_container,
-            text=f"Size: {size_str}  •  Duration: {duration_str}  •  Profile: {profile_text}",
-            anchor="w",
-            font=ctk.CTkFont(family="Open Sans", size=11),
-            text_color="#8E8E93"
-        )
-        self.details_label.pack(fill="x", anchor="w", pady=(0, 6))
+        _detail_font = ctk.CTkFont(family="Open Sans", size=11)
+        self.details_row = ctk.CTkFrame(self.left_container, fg_color="transparent")
+        self.details_row.pack(fill="x", anchor="w", pady=(0, 6))
+        self.seg_size = stable_value_label(self.details_row, 235, _detail_font, "#8E8E93",
+                                           text=f"Size: {size_str}  •  {duration_str}")
+        self.seg_size.pack(side="left")
+        self.seg_speed = stable_value_label(self.details_row, 110, _detail_font, "#8E8E93")
+        self.seg_speed.pack(side="left")
+        self.seg_eta = stable_value_label(self.details_row, 130, _detail_font, "#8E8E93")
+        self.seg_eta.pack(side="left")
+        self.seg_profile = ctk.CTkLabel(self.details_row, text=f"Profile: {profile_text}",
+                                        anchor="w", font=_detail_font, text_color="#8E8E93")
+        self.seg_profile.pack(side="left", fill="x", expand=True)
 
         # 3. Progress Bar
         self.progress_bar = ctk.CTkProgressBar(
@@ -150,13 +173,10 @@ class TaskRow:
         self.progress_bar.pack(fill="x", anchor="w", pady=(0, 4))
 
         # 4. Status Text
-        self.status_label = ctk.CTkLabel(
-            self.left_container,
-            text="Waiting...",
-            anchor="w",
-            font=ctk.CTkFont(family="Open Sans", size=11, weight="bold"),
-            text_color="#AEAEB2"
-        )
+        self.status_label = stable_value_label(
+            self.left_container, 170,
+            ctk.CTkFont(family="Open Sans", size=11, weight="bold"),
+            "#AEAEB2", text="Waiting...")
         self.status_label.pack(anchor="w")
 
         # 5. Action buttons (Preview & Delete)
@@ -231,43 +251,34 @@ class TaskRow:
         
         self.preset_label_text = task.preset_name.replace(" WebM", "") + (" (GPU)" if task.use_gpu else " (CPU)")
         
+        def _segs(size_txt, speed_txt, eta_txt, col):
+            self.seg_size.configure(text=size_txt, text_color=col)
+            self.seg_speed.configure(text=speed_txt, text_color=col)
+            self.seg_eta.configure(text=eta_txt, text_color=col)
+            self.seg_profile.configure(text=f"Profile: {self.preset_label_text}", text_color="#8E8E93")
+
         if task.status == "Encoding":
             orig_size_str = self._format_size(task.metadata["size_bytes"])
-            eta_str = self._format_eta(task.eta)
             if task.est_size_bytes > 0:
-                est_size_str = self._format_size(task.est_size_bytes)
-                size_text = f"Estimated: ~{est_size_str} of {orig_size_str}"
+                size_text = f"~{self._format_size(task.est_size_bytes)} of {orig_size_str}"
             else:
                 size_text = f"Size: {orig_size_str}"
-            
-            self.details_label.configure(
-                text=f"{size_text}  •  Speed: {task.speed}  •  Time Remaining: {eta_str}  •  Profile: {self.preset_label_text}",
-                text_color="#E5E5EA"
-            )
+            _segs(size_text, f"Speed {fmt_speed(task.speed)}",
+                  f"ETA {self._format_eta(task.eta)}", "#E5E5EA")
         elif task.status == "Completed":
             final_size_str = self._format_size(task.est_size_bytes)
             orig_size_str = self._format_size(task.metadata["size_bytes"])
             reduction = 0
             if task.metadata["size_bytes"] > 0:
                 reduction = int(((task.metadata["size_bytes"] - task.est_size_bytes) / task.metadata["size_bytes"]) * 100)
-            if reduction >= 0:
-                self.details_label.configure(
-                    text=f"Final Size: {final_size_str} of {orig_size_str} (Saved {reduction}%)  •  Done",
-                    text_color="#4EB18C"
-                )
-            else:
-                self.details_label.configure(
-                    text=f"Final Size: {final_size_str} of {orig_size_str} (+{abs(reduction)}% LARGER than original)  •  Done",
-                    text_color="#E8574A"
-                )
+            _segs(f"Final: {final_size_str} of {orig_size_str}",
+                  f"Saved {reduction}%" if reduction >= 0 else f"+{abs(reduction)}% LARGER",
+                  "Done",
+                  "#4EB18C" if reduction >= 0 else "#E8574A")
         else:
-            # Update default labels if settings changes occur in real-time
             duration_str = self._format_duration(task.metadata["duration"])
             size_str = self._format_size(task.metadata["size_bytes"])
-            self.details_label.configure(
-                text=f"Size: {size_str}  •  Duration: {duration_str}  •  Profile: {self.preset_label_text}",
-                text_color="#8E8E93"
-            )
+            _segs(f"Size: {size_str}  •  {duration_str}", "", "", "#8E8E93")
             
         if task.status == "Encoding":
             self.delete_btn.configure(state="disabled")
@@ -306,16 +317,14 @@ class TaskRow:
 
     def _format_eta(self, seconds):
         if seconds == -1:
-            return "Estimating..."
+            return "--:--"
         if seconds == 0:
-            return "Done"
-        m, s = divmod(seconds, 60)
+            return "0:00"
+        m, s = divmod(int(seconds), 60)
         h, m = divmod(m, 60)
         if h > 0:
-            return f"{h}h {m}m"
-        if m > 0:
-            return f"{m}m {s}s"
-        return f"{s}s"
+            return f"{h}:{m:02d}:{s:02d}"
+        return f"{m}:{s:02d}"
 
 
 class WebMCompressorApp(ctk.CTk, _DnDBase):
@@ -365,9 +374,11 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.preview_window = None
         self.taskbar = None  # created lazily once the window has a real HWND
 
-        # Shell layout: title bar row + two-sheet content row
-        self.shell.grid_columnconfigure(0, weight=1, minsize=350)  # Sidebar
-        self.shell.grid_columnconfigure(1, weight=3)               # Main Panel
+        # Shell layout: title bar row + two-sheet content row.
+        # Sidebar column is FROZEN (weight 0 + fixed frame width): dynamic
+        # text in it can never push the main panel around.
+        self.shell.grid_columnconfigure(0, weight=0)               # Sidebar (fixed)
+        self.shell.grid_columnconfigure(1, weight=1)               # Main Panel
         self.shell.grid_rowconfigure(1, weight=1)
 
         self._build_titlebar()
@@ -526,9 +537,12 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             fg_color="#23232F",
             border_width=1,
             border_color="#31313F",
-            corner_radius=16
+            corner_radius=16,
+            width=392
         )
-        sidebar.grid(row=1, column=0, sticky="nsew", padx=(12, 6), pady=(4, 26))
+        sidebar.grid(row=1, column=0, sticky="nsw", padx=(12, 6), pady=(4, 26))
+        sidebar.grid_propagate(False)
+        sidebar.pack_propagate(False)
 
         # Brand row (app icon + name)
         brand = ctk.CTkFrame(sidebar, fg_color="transparent")
@@ -621,11 +635,9 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         )
         self.crf_slider.pack(fill="x", padx=12, pady=0)
         self.crf_slider.set(32)
-        self.crf_value_label = ctk.CTkLabel(
-            card_prof, text="Quality: 32 (Medium)",
-            font=ctk.CTkFont(family="Open Sans", size=11),
-            text_color="#AEAEB2"
-        )
+        self.crf_value_label = stable_value_label(
+            card_prof, 220, ctk.CTkFont(family="Open Sans", size=11),
+            "#AEAEB2", text="Quality: 32 (Medium)")
         self.crf_value_label.pack(anchor="w", padx=12, pady=(2, 6))
 
         # AV1 speed dial (only packed when an AV1 profile is active on CPU)
@@ -647,11 +659,9 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         )
         self.av1_slider.pack(fill="x", padx=12, pady=0)
         self.av1_slider.set(8)
-        self.av1_value_label = ctk.CTkLabel(
-            self.av1_frame, text="Preset: 8 (Default)",
-            font=ctk.CTkFont(family="Open Sans", size=11),
-            text_color="#AEAEB2"
-        )
+        self.av1_value_label = stable_value_label(
+            self.av1_frame, 220, ctk.CTkFont(family="Open Sans", size=11),
+            "#AEAEB2", text="Preset: 8 (Default)")
         self.av1_value_label.pack(anchor="w", padx=12, pady=(2, 8))
 
         # keep a reference name used elsewhere in the app
@@ -1736,9 +1746,9 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         # INPUT / EST. OUTPUT / SAVED describe only what is ticked to run
         sel = [t for t in tasks if getattr(t, "selected", True)]
         if not sel:
-            self.kpi_in_n.configure(text="—"); self.kpi_in_c.configure(text="nothing selected")
-            self.kpi_out_n.configure(text="—"); self.kpi_out_c.configure(text=" ")
-            self.kpi_saved_n.configure(text="—", text_color="#F2F2F4"); self.kpi_saved_c.configure(text=" ")
+            self.kpi_in_n.configure(text="-"); self.kpi_in_c.configure(text="nothing selected")
+            self.kpi_out_n.configure(text="-"); self.kpi_out_c.configure(text=" ")
+            self.kpi_saved_n.configure(text="-", text_color="#F2F2F4"); self.kpi_saved_c.configure(text=" ")
             return
 
         input_total = sum(t.metadata.get("size_bytes", 0) for t in sel)
