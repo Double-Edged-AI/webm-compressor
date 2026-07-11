@@ -113,6 +113,22 @@ End credits, the hardest test, small text stays readable:
 
 ![Small text comparison](docs/benchmarks/tos_credits.png)
 
+## How it compares
+
+HandBrake and Shutter Encoder are excellent, more powerful, general-purpose tools. This table is not "mine is better" — it is "mine is narrower." WebM Compressor only wins when your job is specifically *small, valid WebM for a course/LMS upload, with zero fiddling*.
+
+| | **WebM Compressor** | HandBrake | Shutter Encoder | Boram |
+|---|---|---|---|---|
+| WebM / VP9 / AV1 as the *only* job | ✅ | ⚠️ one of ~50 options | ⚠️ one of many | ✅ |
+| Presets tuned for lecture / LMS upload | ✅ | ❌ generic | ❌ generic | ❌ built for short clips |
+| Re-verifies every output is valid WebM | ✅ | ❌ | ❌ | ❌ |
+| Designed for multi-GB lecture files | ✅ | ✅ | ✅ | ⚠️ short clips |
+| Fully offline / no upload / no telemetry | ✅ | ✅ | ✅ | ✅ |
+| Actively maintained (2026) | ✅ | ✅ | ✅ | ❌ inactive for years |
+| Also exports MP4 / H.264 / H.265 | ❌ by design | ✅ | ✅ | ⚠️ some |
+
+If you need MP4/H.265, editing, or device presets, use HandBrake or Shutter Encoder. If you just need a lecture turned into a small, guaranteed-valid WebM without learning codec settings, that is what this app is for.
+
 ## Install (users)
 
 1. Download the latest zip from [Releases](https://github.com/Double-Edged-AI/webm-compressor/releases)
@@ -143,9 +159,32 @@ Notes for builders:
 
 Input is decoded (on GPU when possible), optionally scaled, then encoded to VP9 or AV1 and muxed into `.webm` in a single pass (or two-pass for VP9). After each file, the app re-checks the container and codecs to guarantee valid WebM output. Color tags are preserved for HDR sources, timestamps are handled safely for variable-framerate recordings, and originals are never overwritten.
 
+## FAQ
+
+**Why only WebM? Why not MP4?**
+MP4/H.264/H.265 carry patent and licensing baggage, and every other tool already does them well. WebM (VP9/AV1/Opus) is royalty-free, plays in every modern browser, and is ideal for LMS and course sites. Doing one format is what lets the presets be genuinely tuned instead of generic. Need MP4? Use HandBrake.
+
+**Is my video uploaded anywhere?**
+No. Everything runs on your PC — no server, no size caps, no accounts, no telemetry.
+
+**Why is AV1 so slow?**
+AV1 is newer and more efficient, but far more compute-heavy to encode. It makes files ~20–30% smaller than VP9 at the cost of much longer encode time. For most course uploads the VP9 *LMS Upload* preset is the better trade.
+
+**Windows shows a "Windows protected your PC" / SmartScreen warning — is it safe?**
+That warning appears for any app without an expensive code-signing certificate; it is not a sign anything is wrong. Click **More info → Run anyway**. The full source is public if you want to inspect or build it yourself.
+
+**Do I need to install FFmpeg myself?**
+No. On first run the app downloads the official LGPL FFmpeg build automatically.
+
+**Do I need a powerful GPU?**
+No. A recent GPU speeds things up, but the app always falls back to CPU encoding, which works on any machine.
+
+**Can I use it commercially?**
+The license is PolyForm Noncommercial — free for any non-commercial use. Commercial use needs a separate license from the author.
+
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), including the CLA note.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), including the CLA note. See the [Roadmap](ROADMAP.md) for what's planned and the [Changelog](CHANGELOG.md) for release history.
 
 ## License
 
