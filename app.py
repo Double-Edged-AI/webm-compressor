@@ -532,14 +532,14 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         # Brand row (app icon + name)
         brand = ctk.CTkFrame(sidebar, fg_color="transparent")
-        brand.pack(fill="x", padx=16, pady=(16, 8))
+        brand.pack(fill="x", padx=(26, 16), pady=(16, 8))
         try:
             from PIL import Image
             _img = ctk.CTkImage(
                 Image.open(resource_path(os.path.join("assets", "icon_256.png"))),
-                size=(24, 24)
+                size=(30, 30)
             )
-            ctk.CTkLabel(brand, image=_img, text="").pack(side="left", padx=(0, 8))
+            ctk.CTkLabel(brand, image=_img, text="").pack(side="left", padx=(0, 10))
         except Exception:
             pass
         _brand_text = ctk.CTkFrame(brand, fg_color="transparent")

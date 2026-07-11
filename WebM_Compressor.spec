@@ -14,7 +14,7 @@ a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=tkdnd_binaries,
-    datas=[(CTK_PATH, 'customtkinter/'), ('assets/icon.ico', 'assets'), ('assets/fonts', 'assets/fonts')] + tkdnd_datas,
+    datas=[(CTK_PATH, 'customtkinter/'), ('assets/icon.ico', 'assets'), ('assets/icon_256.png', 'assets'), ('assets/fonts', 'assets/fonts')] + tkdnd_datas,
     hiddenimports=['comtypes', 'comtypes.client'] + tkdnd_hidden,
     hookspath=[],
     hooksconfig={},
