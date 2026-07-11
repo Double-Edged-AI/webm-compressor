@@ -18,35 +18,35 @@ CREATE_NO_WINDOW = 0x08000000
 PRESETS = {
     "LMS Upload - VP9 1080p (Recommended)": {
         "codec": "libvpx-vp9",
-        "args": ["-crf", "32", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
+        "args": ["-crf", "32", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-row-mt", "1", "-tile-columns", "2", "-threads", "16", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "96k"],
         "resolution": None,
         "extension": ".webm"
     },
     "High Quality - VP9 1080p": {
         "codec": "libvpx-vp9",
-        "args": ["-crf", "22", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
+        "args": ["-crf", "22", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-row-mt", "1", "-tile-columns", "2", "-threads", "16", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "128k"],
         "resolution": None,
         "extension": ".webm"
     },
     "Balanced - VP9 1080p": {
         "codec": "libvpx-vp9",
-        "args": ["-crf", "30", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
+        "args": ["-crf", "30", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-row-mt", "1", "-tile-columns", "2", "-threads", "16", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "96k"],
         "resolution": None,
         "extension": ".webm"
     },
     "Small Size - VP9 720p": {
         "codec": "libvpx-vp9",
-        "args": ["-crf", "38", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
+        "args": ["-crf", "38", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-row-mt", "1", "-tile-columns", "2", "-threads", "16", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "64k"],
         "resolution": (1280, 720),
         "extension": ".webm"
     },
     "Ultra Small - VP9 720p (Slow Internet)": {
         "codec": "libvpx-vp9",
-        "args": ["-crf", "42", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
+        "args": ["-crf", "42", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-row-mt", "1", "-tile-columns", "2", "-threads", "16", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "64k"],
         "resolution": (1280, 720),
         "extension": ".webm"

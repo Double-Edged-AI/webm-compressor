@@ -112,16 +112,20 @@ class TaskRow:
         )
         self.select_cb.pack(side="left", padx=(12, 0), pady=10)
 
+        # Right container (actions)
+        self.right_container = ctk.CTkFrame(self.frame, fg_color="transparent", width=74)
+        self.right_container.pack(side="right", padx=(6, 12), pady=10)
+        self.right_container.pack_propagate(False)
+        self.right_container.configure(height=34)
+
         # Left container (details and progress)
         self.left_container = ctk.CTkFrame(self.frame, fg_color="transparent")
         self.left_container.pack(side="left", fill="both", expand=True, padx=(8, 10), pady=10)
-        
-        # Right container (actions)
-        self.right_container = ctk.CTkFrame(self.frame, fg_color="transparent")
-        self.right_container.pack(side="right", fill="y", padx=(10, 15), pady=10)
 
         # 1. Filename row: name + "already compressed" tag
         base_name = os.path.basename(task.input_path)
+        if len(base_name) > 58:
+            base_name = base_name[:55] + "…"
         self.name_row = ctk.CTkFrame(self.left_container, fg_color="transparent")
         self.name_row.pack(fill="x", anchor="w", pady=(0, 2))
         self.name_label = ctk.CTkLabel(
@@ -150,16 +154,16 @@ class TaskRow:
         _detail_font = ctk.CTkFont(family="Open Sans", size=11)
         self.details_row = ctk.CTkFrame(self.left_container, fg_color="transparent")
         self.details_row.pack(fill="x", anchor="w", pady=(0, 6))
-        self.seg_size = stable_value_label(self.details_row, 235, _detail_font, "#8E8E93",
+        self.seg_size = stable_value_label(self.details_row, 200, _detail_font, "#8E8E93",
                                            text=f"Size: {size_str}  •  {duration_str}")
         self.seg_size.pack(side="left")
-        self.seg_speed = stable_value_label(self.details_row, 110, _detail_font, "#8E8E93")
+        self.seg_speed = stable_value_label(self.details_row, 95, _detail_font, "#8E8E93")
         self.seg_speed.pack(side="left")
-        self.seg_eta = stable_value_label(self.details_row, 130, _detail_font, "#8E8E93")
+        self.seg_eta = stable_value_label(self.details_row, 110, _detail_font, "#8E8E93")
         self.seg_eta.pack(side="left")
-        self.seg_profile = ctk.CTkLabel(self.details_row, text=f"Profile: {profile_text}",
-                                        anchor="w", font=_detail_font, text_color="#8E8E93")
-        self.seg_profile.pack(side="left", fill="x", expand=True)
+        self.seg_profile = stable_value_label(self.details_row, 150, _detail_font, "#8E8E93",
+                                              text=self._fit_profile(profile_text))
+        self.seg_profile.pack(side="left")
 
         # 3. Progress Bar
         self.progress_bar = ctk.CTkProgressBar(
@@ -255,7 +259,7 @@ class TaskRow:
             self.seg_size.configure(text=size_txt, text_color=col)
             self.seg_speed.configure(text=speed_txt, text_color=col)
             self.seg_eta.configure(text=eta_txt, text_color=col)
-            self.seg_profile.configure(text=f"Profile: {self.preset_label_text}", text_color="#8E8E93")
+            self.seg_profile.configure(text=self._fit_profile(self.preset_label_text), text_color="#8E8E93")
 
         if task.status == "Encoding":
             orig_size_str = self._format_size(task.metadata["size_bytes"])
@@ -288,6 +292,11 @@ class TaskRow:
             self.delete_btn.configure(state="normal")
             self.preview_btn.configure(state="normal")
             self.select_cb.configure(state="normal")
+
+    def _fit_profile(self, profile_text):
+        """Ellipsize the profile so its fixed 150px segment never overflows."""
+        t = str(profile_text)
+        return "Profile: " + (t[:17] + "…" if len(t) > 18 else t)
 
     def _on_select_toggled(self):
         self.task.selected = bool(self.select_var.get())
@@ -465,9 +474,24 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             self._is_maximized = False
         else:
             self._restore_geometry = self.geometry()
-            rect = wintypes.RECT()
-            ctypes.windll.user32.SystemParametersInfoW(48, 0, byref(rect), 0)  # SPI_GETWORKAREA
-            self.geometry(f"{rect.right - rect.left}x{rect.bottom - rect.top}+{rect.left}+{rect.top}")
+            # Maximize onto the monitor the window is CURRENTLY on, not the
+            # primary one (SPI_GETWORKAREA only knows the primary monitor).
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD),
+                            ("rcMonitor", wintypes.RECT),
+                            ("rcWork", wintypes.RECT),
+                            ("dwFlags", wintypes.DWORD)]
+            u32 = ctypes.windll.user32
+            hwnd = u32.GetParent(self.winfo_id()) or self.winfo_id()
+            hmon = u32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+            mi = MONITORINFO()
+            mi.cbSize = ctypes.sizeof(MONITORINFO)
+            if hmon and u32.GetMonitorInfoW(hmon, byref(mi)):
+                r = mi.rcWork
+            else:  # fallback: primary monitor work area
+                r = wintypes.RECT()
+                u32.SystemParametersInfoW(48, 0, byref(r), 0)
+            self.geometry(f"{r.right - r.left}x{r.bottom - r.top}+{r.left}+{r.top}")
             self._is_maximized = True
 
     def _make_taskbar_window(self):
@@ -1402,24 +1426,26 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.refresh_start_button()
 
     def generate_quality_preview(self, task):
-        self.preview_window = ctk.CTkToplevel(self)
-        self.preview_window.title("Preview")
-        self.preview_window.geometry("350x150")
-        self.preview_window.resizable(False, False)
-        
-        self.preview_window.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() // 2) - 175
-        y = self.winfo_y() + (self.winfo_height() // 2) - 75
-        self.preview_window.geometry(f"+{x}+{y}")
-        self.preview_window.transient(self)
-        self.preview_window.grab_set()
-        
-        lbl = ctk.CTkLabel(
-            self.preview_window, 
-            text="Extracting visual sample...\nThis may take a moment...", 
-            font=ctk.CTkFont(size=13)
+        from dialogs import themed_toplevel
+        self.preview_window, pbody = themed_toplevel(
+            "Quality Preview", width=400, height=170, modal=True
         )
-        lbl.pack(pady=40)
+        ctk.CTkLabel(
+            pbody, text="Generating 5-second quality preview",
+            font=ctk.CTkFont(family="Poppins", size=14, weight="bold"),
+            text_color="#F2F2F4"
+        ).pack(anchor="w", pady=(6, 2))
+        ctk.CTkLabel(
+            pbody, text="Extracting sample frames and compressing…",
+            font=ctk.CTkFont(family="Open Sans", size=12),
+            text_color="#8E8E9C"
+        ).pack(anchor="w")
+        _pv_bar = ctk.CTkProgressBar(
+            pbody, mode="indeterminate",
+            progress_color="#F4695C", fg_color="#2E2E3C", height=6
+        )
+        _pv_bar.pack(fill="x", pady=(14, 4))
+        _pv_bar.start()
 
         preset_name = self.preset_dropdown.get()
         crf_val = int(self.crf_slider.get())
@@ -1595,7 +1621,17 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.on_queue_update()
 
     def on_queue_update(self):
-        self.after(0, self._safe_ui_update)
+        # ffmpeg emits many progress lines per second; coalesce them to ~10
+        # UI refreshes/sec so the Tk mainloop stays responsive (smooth window
+        # dragging) instead of drowning in redraw work.
+        if getattr(self, "_ui_refresh_pending", False):
+            return
+        self._ui_refresh_pending = True
+        self.after(100, self._coalesced_ui_update)
+
+    def _coalesced_ui_update(self):
+        self._ui_refresh_pending = False
+        self._safe_ui_update()
 
     def on_queue_finish(self):
         self.after(0, self._safe_ui_finish)
