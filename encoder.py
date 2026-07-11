@@ -12,51 +12,53 @@ import tempfile
 # Windows-specific flag to prevent cmd console windows from spawning
 CREATE_NO_WINDOW = 0x08000000
 
-# Predefined presets optimized for WebM outputs only (libvpx-vp9 and libsvtav1)
+# Predefined presets optimized for WebM outputs only (libvpx-vp9 and libsvtav1).
+# Names are user-facing: task first, codec/resolution second. app.py logic keys
+# off the "AV1" and "Audio Only" substrings - keep those stable when renaming.
 PRESETS = {
-    "LMS Upload Preset (VP9 1080p)": {
+    "LMS Upload - VP9 1080p (Recommended)": {
         "codec": "libvpx-vp9",
         "args": ["-crf", "32", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "96k"],
         "resolution": None,
         "extension": ".webm"
     },
-    "High Quality WebM (VP9 1080p)": {
+    "High Quality - VP9 1080p": {
         "codec": "libvpx-vp9",
         "args": ["-crf", "22", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "128k"],
         "resolution": None,
         "extension": ".webm"
     },
-    "Balanced WebM (VP9 1080p)": {
+    "Balanced - VP9 1080p": {
         "codec": "libvpx-vp9",
         "args": ["-crf", "30", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "96k"],
         "resolution": None,
         "extension": ".webm"
     },
-    "Small File Size WebM (VP9 720p)": {
+    "Small Size - VP9 720p": {
         "codec": "libvpx-vp9",
         "args": ["-crf", "38", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "64k"],
         "resolution": (1280, 720),
         "extension": ".webm"
     },
-    "LMS Ultra-Compressed (VP9 720p)": {
+    "Ultra Small - VP9 720p (Slow Internet)": {
         "codec": "libvpx-vp9",
         "args": ["-crf", "42", "-b:v", "0", "-deadline", "good", "-cpu-used", "2", "-lag-in-frames", "25", "-auto-alt-ref", "1"],
         "audio_args": ["-c:a", "libopus", "-b:a", "64k"],
         "resolution": (1280, 720),
         "extension": ".webm"
     },
-    "Next-Gen AV1 WebM (AV1 1080p)": {
+    "Experimental AV1 - 1080p (Smallest, Slower)": {
         "codec": "libsvtav1",
         "args": ["-crf", "32", "-preset", "8", "-g", "240"],
         "audio_args": ["-c:a", "libopus", "-b:a", "96k"],
         "resolution": None,
         "extension": ".webm"
     },
-    "Audio-Only WebM (Opus 64kbps)": {
+    "Audio Only - Opus (No Video)": {
         "codec": None,
         "args": ["-vn"],
         "audio_args": ["-c:a", "libopus", "-b:a", "64k"],
@@ -64,6 +66,9 @@ PRESETS = {
         "extension": ".webm"
     }
 }
+
+# The audio-only preset name is referenced across the UI - single source of truth.
+AUDIO_ONLY_PRESET = "Audio Only - Opus (No Video)"
 
 def get_ffmpeg_path():
     """
@@ -722,6 +727,7 @@ class EncoderTask:
         self.two_pass = two_pass
         self.bit10 = bit10
         self.av1_preset = av1_preset
+        self.selected = True   # user can untick a row to exclude it from the run
         self.hybrid_active = False
         self.hybrid_accel = None
         self.status = "Pending"
@@ -764,7 +770,7 @@ class EncodingQueue:
         self.abort_flag = False
         
         for task in self.tasks:
-            if task.status in ["Pending", "Failed", "Stopped"]:
+            if task.status in ["Pending", "Failed", "Stopped"] and getattr(task, "selected", True):
                 task.status = "Queued"
                 task.progress = 0.0
                 task.speed = "0.0x"
