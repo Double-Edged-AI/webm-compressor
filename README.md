@@ -30,14 +30,11 @@ Honest note: like most video tools, FFmpeg does the actual encoding under the ho
 
 ### What makes it different
 
-We researched the existing options (HandBrake, Shutter Encoder, WebM GUIs, command-line tools, online compressors) before making these claims:
+I built this because nothing else did the job properly. HandBrake and Shutter Encoder are great, but WebM is buried in there as one option out of fifty, and I got tired of re-checking the same settings for every lecture upload. The only WebM-specific GUI I could find hasn't been touched in years and was made for short clips, not hour-long recordings.
 
-- **The only actively maintained WebM-focused desktop GUI we know of.** Other desktop tools treat WebM as one checkbox among fifty formats; the one WebM-specific GUI we found is dormant and aimed at short clips.
-- **Built specifically for educational and LMS video workflows.** No other tool we found targets course creators: presets are tuned for lecture and screen-capture content, and the recommended default is simply called LMS Upload.
-- **Offline, private, and uncapped.** Online compressors require uploading course material to a third-party server and cap free file sizes. This app runs entirely on your PC with no size limits.
-- **Output you can trust.** Every finished file is re-verified as valid WebM (container and codecs), and the app refuses to start without a save location or overwrite an original.
+So this app makes the opposite trade: it only does WebM, and it does it with presets already tuned for course content. Pick LMS Upload, pick a folder, press the button. No codec knowledge needed.
 
-What we do not claim: fastest encoder, best quality, or new compression technology. Every serious tool in this space uses the same encoders; the difference here is the workflow and the audience.
+The other reason is privacy and size. My course videos are multi-gigabyte files, and online compressors either choke on them, put them behind a paywall, or want me to upload course material to someone else's server. Everything here runs on your own PC, with no file-size limit, and the app double-checks every finished file so you never upload a broken video to your LMS.
 
 ## Features
 
