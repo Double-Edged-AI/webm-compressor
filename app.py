@@ -102,17 +102,29 @@ class TaskRow:
         self.right_container = ctk.CTkFrame(self.frame, fg_color="transparent")
         self.right_container.pack(side="right", fill="y", padx=(10, 15), pady=10)
 
-        # 1. Filename label
+        # 1. Filename row: name + "already compressed" tag
         base_name = os.path.basename(task.input_path)
+        self.name_row = ctk.CTkFrame(self.left_container, fg_color="transparent")
+        self.name_row.pack(fill="x", anchor="w", pady=(0, 2))
         self.name_label = ctk.CTkLabel(
-            self.left_container, 
-            text=base_name, 
-            anchor="w", 
+            self.name_row,
+            text=base_name,
+            anchor="w",
             font=ctk.CTkFont(family="Open Sans", size=14, weight="bold"),
             text_color="#FFFFFF"
         )
-        self.name_label.pack(fill="x", anchor="w", pady=(0, 2))
-        
+        self.name_label.pack(side="left")
+        self.compressed_tag = ctk.CTkLabel(
+            self.name_row,
+            text="⚠ already compressed",
+            fg_color="#33291A",
+            corner_radius=6,
+            padx=8,
+            font=ctk.CTkFont(family="Montserrat", size=10, weight="bold"),
+            text_color="#BFA378"
+        )
+        self._tag_visible = False  # packed on demand via set_compressed_tag
+
         # 2. Preset & Details stacked
         duration_str = self._format_duration(task.metadata["duration"])
         size_str = self._format_size(task.metadata["size_bytes"])
@@ -178,9 +190,20 @@ class TaskRow:
         )
         self.delete_btn.pack(side="left", padx=3)
 
+    def set_compressed_tag(self, visible):
+        """Show/hide the amber 'already compressed' chip next to the filename."""
+        if self.task.status in ("Encoding", "Completed"):
+            visible = False
+        if visible and not self._tag_visible:
+            self.compressed_tag.pack(side="left", padx=(10, 0))
+            self._tag_visible = True
+        elif not visible and self._tag_visible:
+            self.compressed_tag.pack_forget()
+            self._tag_visible = False
+
     def update(self, task):
         self.task = task
-        
+
         # Apple semantic status colors
         status_colors = {
             "Pending": "#BFA378",      # Apple Orange
@@ -1168,6 +1191,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                 if out_dir:
                     task.output_path = self.get_unique_output_path(out_dir, os.path.basename(task.input_path), ".webm")
 
+        self.refresh_compressed_tags()
         self.on_queue_update()
 
     def update_crf_label(self, val):
@@ -1280,6 +1304,22 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         self.refresh_overall_progress()
         self.refresh_start_button()
+        self.refresh_compressed_tags()
+
+    def _is_already_compressed(self, task):
+        """True when the input's bitrate is below what the current preset produces."""
+        preset_name = self.preset_dropdown.get()
+        if preset_name == AUDIO_ONLY_PRESET:
+            return False
+        in_bps = task.metadata.get("bitrate", 0)
+        expected = estimate_typical_output_bitrate(
+            preset_name, int(self.crf_slider.get()), task.metadata.get("height", 1080)
+        )
+        return bool(in_bps and expected and in_bps < expected * 0.8)
+
+    def refresh_compressed_tags(self):
+        for row in self.task_rows.values():
+            row.set_compressed_tag(self._is_already_compressed(row.task))
 
     def get_selected_output_dir(self):
         """The user-chosen save folder, or None if not selected yet (required to start)."""
