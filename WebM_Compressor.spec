@@ -3,11 +3,11 @@ import os
 import customtkinter
 from PyInstaller.utils.hooks import collect_all
 
-# Resolve customtkinter's data files from the active environment (portable —
+# Resolve customtkinter's data files from the active environment (portable,
 # works on any machine instead of a hardcoded site-packages path).
 CTK_PATH = os.path.dirname(customtkinter.__file__)
 
-# tkinterdnd2 ships the native TkDnD Tcl extension as data — collect all of it.
+# tkinterdnd2 ships the native TkDnD Tcl extension as data; collect all of it.
 tkdnd_datas, tkdnd_binaries, tkdnd_hidden = collect_all('tkinterdnd2')
 
 a = Analysis(

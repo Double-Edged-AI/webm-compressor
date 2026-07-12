@@ -9,13 +9,13 @@ venv/
 build/
 dist/
 
-# FFmpeg binaries — never commit (large + separately licensed; fetched on first run)
+# FFmpeg binaries: never commit (large + separately licensed; fetched on first run)
 ffmpeg.exe
 ffprobe.exe
 ffmpeg
 ffprobe
 
-# Env / secrets — never commit
+# Env / secrets: never commit
 .env
 .env.*
 *.pem

@@ -2,7 +2,7 @@
 Loads the bundled Poppins / Montserrat / Open Sans TTFs into this process
 (Windows GDI, FR_PRIVATE) so the app's typography renders identically on
 machines that don't have the fonts installed. All three families are
-Google Fonts under the SIL Open Font License — bundling is permitted
+Google Fonts under the SIL Open Font License; bundling is permitted
 (license texts: https://fonts.google.com).
 
 Call load_bundled_fonts() once, before any Tk widgets are created.

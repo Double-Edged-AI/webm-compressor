@@ -26,7 +26,7 @@ WANTED_BINARIES = ("ffmpeg.exe", "ffprobe.exe")
 
 
 def get_app_dir():
-    """Directory where the app executable (or source) lives — same logic as encoder.py."""
+    """Directory where the app executable (or source) lives. Same logic as encoder.py."""
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))

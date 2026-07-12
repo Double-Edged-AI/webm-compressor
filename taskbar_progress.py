@@ -4,7 +4,7 @@ show green progress on its taskbar icon during copies).
 
 Uses comtypes to talk to the shell COM object. Every call is wrapped so any
 failure (non-Windows OS, old Windows, COM error, missing comtypes) degrades to
-a silent no-op — taskbar progress is a nicety, never a crash source.
+a silent no-op. Taskbar progress is a nicety, never a crash source.
 """
 import sys
 
