@@ -245,13 +245,31 @@ class TaskRow:
             status_text = f"Encoding ({int(task.progress)}%)"
             if task.two_pass:
                 if task.progress < 50.0:
-                    status_text = f"Pass 1/2 ({int(task.progress * 2)}%)"
+                    # Pass 1 writes no output, so 0% is normal for a while - say
+                    # what is actually happening instead of a stuck-looking "0%".
+                    p1 = int(task.progress * 2)
+                    status_text = f"Analyzing (pass 1 of 2)…" if p1 < 1 else f"Pass 1 of 2 ({p1}%)"
                 else:
-                    status_text = f"Pass 2/2 ({int((task.progress - 50.0) * 2)}%)"
-            
+                    status_text = f"Encoding (pass 2 of 2) ({int((task.progress - 50.0) * 2)}%)"
+            elif task.progress < 1:
+                status_text = "Starting…"
+
         self.status_label.configure(text=status_text, text_color=color)
-        self.progress_bar.set(task.progress / 100.0)
-        self.progress_bar.configure(progress_color=color if task.progress > 0 else "#31313F")
+
+        # Never look frozen: pulse the bar while encoding at 0% real progress,
+        # otherwise show the true value.
+        if task.status == "Encoding" and task.progress < 1:
+            if not getattr(self, "_pulsing", False):
+                self.progress_bar.configure(mode="indeterminate")
+                self.progress_bar.start()
+                self._pulsing = True
+        else:
+            if getattr(self, "_pulsing", False):
+                self.progress_bar.stop()
+                self.progress_bar.configure(mode="determinate")
+                self._pulsing = False
+            self.progress_bar.set(task.progress / 100.0)
+            self.progress_bar.configure(progress_color=color if task.progress > 0 else "#31313F")
         
         self.preset_label_text = task.preset_name.replace(" WebM", "") + (" (GPU)" if task.use_gpu else " (CPU)")
         
@@ -714,7 +732,18 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             text_color="#D8D8DE",
             command=self.sync_all_options
         )
-        self.bit10_cb.pack(anchor="w", padx=12, pady=(0, 10))
+        self.bit10_cb.pack(anchor="w", padx=12, pady=(0, 4))
+        self.fps30_cb = ctk.CTkCheckBox(
+            card_adv,
+            text="Cap frame rate at 30 fps (faster for screen recordings)",
+            font=ctk.CTkFont(family="Open Sans", size=11),
+            fg_color="#F4695C",
+            border_color="#3A3A44",
+            hover_color="#D95546",
+            text_color="#D8D8DE",
+            command=self.sync_all_options
+        )
+        self.fps30_cb.pack(anchor="w", padx=12, pady=(0, 10))
 
         # 4. Destination (required)
         card_dest = ctk.CTkFrame(sidebar, fg_color="#2B2B39", corner_radius=12)
@@ -1545,7 +1574,42 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         crf_val = int(self.crf_slider.get()) if preset_name != AUDIO_ONLY_PRESET else None
         two_pass = self.two_pass_cb.get()
         bit10 = self.bit10_cb.get()
+        fps_cap = 30 if self.fps30_cb.get() else None
         av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
+
+        # Warn when 10-bit is enabled but every source is 8-bit: it only makes
+        # the encode slower and larger with no possible quality gain.
+        if bit10:
+            eight_bit = [t for t in selected
+                         if (t.metadata.get("pix_fmt") or "") and "10" not in t.metadata.get("pix_fmt", "")]
+            if eight_bit and len(eight_bit) == len(selected):
+                proceed = messagebox.askyesno(
+                    "10-bit Not Needed",
+                    "Your selected video(s) are 8-bit. Enabling 10-bit colour will "
+                    "make the encode SLOWER and the file LARGER with no quality "
+                    "benefit, because there is no 10-bit detail to keep.\n\n"
+                    "Turn off 10-bit and continue? (No = keep 10-bit anyway)"
+                )
+                if proceed:
+                    bit10 = False
+                    self.bit10_cb.deselect()
+
+        # Warn on the slow-combo trap that makes big files look frozen: Two-Pass
+        # on a large source runs an invisible whole-video analysis pass first.
+        big = [t for t in selected if t.metadata.get("size_bytes", 0) > 1_500_000_000]
+        if two_pass and big:
+            proceed = messagebox.askyesno(
+                "Two-Pass Will Be Slow",
+                "Two-Pass is on and a large file is selected. Pass 1 analyses the "
+                "whole video before writing anything, so it can run a long time "
+                "showing little progress, and roughly doubles total encode time for "
+                "a small quality gain.\n\n"
+                "Turn OFF Two-Pass for a much faster single-pass encode? "
+                "(No = keep Two-Pass)"
+            )
+            if proceed:
+                two_pass = False
+                self.two_pass_cb.deselect()
 
         # Rule 3: warn when an input is already compressed below what this
         # preset typically produces (re-encoding it usually makes it larger).
@@ -1579,6 +1643,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             task.crf_override = crf_val
             task.two_pass = two_pass
             task.bit10 = bit10
+            task.fps_cap = fps_cap
             task.av1_preset = av1_preset
             task.output_path = self.get_unique_output_path(out_dir, os.path.basename(task.input_path), ".webm")
 

@@ -458,7 +458,7 @@ def get_metadata(file_path):
         vid_cmd = [
             ffprobe_bin, "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,bit_rate,color_space,color_transfer,color_primaries",
+            "-show_entries", "stream=width,height,bit_rate,color_space,color_transfer,color_primaries,pix_fmt,avg_frame_rate,r_frame_rate",
             "-of", "json",
             file_path
         ]
@@ -473,6 +473,8 @@ def get_metadata(file_path):
         color_space = None
         color_transfer = None
         color_primaries = None
+        pix_fmt = None
+        fps = 0.0
         
         if vid_out.strip():
             vid_data = json.loads(vid_out)
@@ -484,6 +486,13 @@ def get_metadata(file_path):
                 color_space = stream.get("color_space")
                 color_transfer = stream.get("color_transfer")
                 color_primaries = stream.get("color_primaries")
+                pix_fmt = stream.get("pix_fmt")
+                rate = stream.get("avg_frame_rate") or stream.get("r_frame_rate") or "0/0"
+                try:
+                    num, den = rate.split("/")
+                    fps = (float(num) / float(den)) if float(den) else 0.0
+                except Exception:
+                    fps = 0.0
             
         if bitrate == 0:
             fmt_cmd = [
@@ -509,7 +518,9 @@ def get_metadata(file_path):
             "size_bytes": os.path.getsize(file_path),
             "color_space": color_space,
             "color_transfer": color_transfer,
-            "color_primaries": color_primaries
+            "color_primaries": color_primaries,
+            "pix_fmt": pix_fmt,
+            "fps": fps
         }
     except Exception as e:
         print(f"Error fetching metadata for {file_path}: {e}")
@@ -521,7 +532,9 @@ def get_metadata(file_path):
             "size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0,
             "color_space": None,
             "color_transfer": None,
-            "color_primaries": None
+            "color_primaries": None,
+            "pix_fmt": None,
+            "fps": 0.0
         }
 
 def build_ffmpeg_command(task, preset, gpu_params, pass_num=None, passlog_path=None, force_software_decode=False):
@@ -535,6 +548,7 @@ def build_ffmpeg_command(task, preset, gpu_params, pass_num=None, passlog_path=N
     
     meta = task.metadata
     height = meta.get("height", 0)
+    fps_cap = getattr(task, "fps_cap", None)
     
     if task.use_gpu and not force_software_decode:
         if gpu_params:
@@ -599,9 +613,16 @@ def build_ffmpeg_command(task, preset, gpu_params, pass_num=None, passlog_path=N
             else:
                 filters.append(f"scale={w}:-2")
             
+    # Optional frame-rate cap (big speed win for high-fps screen recordings).
+    # A CUDA scaler runs on GPU frames, so cap on CPU after the download.
+    if fps_cap and fps_cap > 0:
+        src_fps = meta.get("fps", 0) or 0
+        if src_fps == 0 or src_fps > fps_cap + 0.5:
+            filters.append(f"fps={fps_cap}")
+
     if filters:
         cmd.extend(["-vf", ",".join(filters)])
-        
+
     # 4. Color / HDR parameters preservation
     meta = task.metadata
     if meta.get("color_primaries"):
@@ -751,6 +772,7 @@ class EncoderTask:
         self.two_pass = two_pass
         self.bit10 = bit10
         self.av1_preset = av1_preset
+        self.fps_cap = None   # None = keep source fps; set to 30 to cap
         self.selected = True   # user can untick a row to exclude it from the run
         self.hybrid_active = False
         self.hybrid_accel = None
