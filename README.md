@@ -2,9 +2,10 @@
 
 ⚔️ *A **Double-Edged AI** project*
 
-**Compress any video into WebM (VP9/AV1) on your own PC.** Built for educational content: lecture recordings and screen-capture courses become small, LMS-friendly files that stream smoothly for students on slow internet. Free for non-commercial use.
+**Turn large lecture and course videos into small WebM files, right on your PC.**
+Pick a preset, pick a folder, and get an upload-ready file. Free for non-commercial use.
 
-**Perfect for:** 🎓 LMS uploads · 📚 online course platforms · 🖥️ screen-recorded lectures · 🌍 students on slow connections
+Made for: 🎓 LMS uploads · 📚 online courses · 🖥️ screen-recorded lectures
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
@@ -14,29 +15,21 @@
 
 ![WebM Compressor dashboard mid-encode](docs/screenshot.png)
 
-![WebM Compressor demo — drag a video, pick a preset, compress](docs/demo.gif)
+![WebM Compressor demo: drag a video, pick a preset, compress](docs/demo.gif)
 
 > ⚠️ **WebM only.** This app exports `.webm` files (VP9/AV1 video, Opus audio) and nothing else. Every finished file is re-verified as valid WebM. If you need MP4 or H.264, use a general-purpose tool like HandBrake; that is not this app's job.
 
 ---
 
-## Why this app
+## Why I built this
 
-Plenty of tools convert video. This one is built around a single, common workflow: a lecture recording is too big to upload, and the students who will watch it do not have fast internet.
+A lecture recording is often too big to upload, and the students who need it may not have fast internet. This app exists to fix that one workflow.
 
-- **One format, done properly.** WebM (VP9/AV1) is web-native, royalty-free, and plays in every modern browser, which makes it a good fit for LMS platforms and course sites.
-- **Local and private.** Compression runs entirely on your PC. Course material never gets uploaded to a third-party server, and there are no file-size caps or subscriptions.
-- **Simple for non-technical users.** Pick a preset, pick a folder, press one button. The presets are tuned for course content: readable screen text, clear voice audio, small files.
+Exporting MP4 is easy in almost any editor or converter. WebM is often the harder case: many video editors do not offer it as a simple default, so creating one can mean adding a plugin, running the file through a separate converter, or adjusting manual settings. General tools like HandBrake and Shutter Encoder can produce WebM, but it sits among dozens of other formats and options.
 
-Honest note: like most video tools, FFmpeg does the actual encoding under the hood. What this app adds is the workflow: LMS-focused presets, a batch queue with per-file selection, required save location, GPU handling with automatic fallback, and guaranteed WebM output.
+This app does the opposite. It only makes WebM, with presets already set up for course and lecture uploads. Pick a preset, pick a folder, and you get a small, valid file. No plugins, no codec settings.
 
-### What makes it different
-
-I built this because nothing else did the job properly. HandBrake and Shutter Encoder are great, but WebM is buried in there as one option out of fifty, and I got tired of re-checking the same settings for every lecture upload. The only WebM-specific GUI I could find hasn't been touched in years and was made for short clips, not hour-long recordings.
-
-So this app makes the opposite trade: it only does WebM, and it does it with presets already tuned for course content. Pick LMS Upload, pick a folder, press the button. No codec knowledge needed.
-
-The other reason is privacy and size. My course videos are multi-gigabyte files, and online compressors either choke on them, put them behind a paywall, or want me to upload course material to someone else's server. Everything here runs on your own PC, with no file-size limit, and the app double-checks every finished file so you never upload a broken video to your LMS.
+The encoding itself is done by FFmpeg, like most video tools. What this app adds is the workflow around it: course-ready presets, a batch queue, a fixed save location, automatic GPU use with a CPU fallback, and a WebM validity check on every file. It is fast, too: high-bitrate lecture footage typically shrinks by around 80% with no visible loss (see the [benchmarks](#benchmarks) below).
 
 ## Features
 
@@ -47,6 +40,7 @@ The other reason is privacy and size. My course videos are multi-gigabyte files,
 - 🖱️ **Drag and drop** videos straight into the window
 - ⚡ **CPU/GPU engine choice** with automatic hardware detection and CPU fallback (details below)
 - 📁 **Required, respected save location**: output goes exactly where you choose, originals are never touched
+- 🔒 **Fully offline and private**: nothing is uploaded, no accounts, no telemetry
 - 📊 **Progress everywhere**: per-file bars, ETA, predicted output size, and real Windows taskbar progress
 - 👀 **5-second quality preview** before committing to a long encode
 - 🎞️ **VP9** (libvpx) and **AV1** (SVT-AV1) with **Opus** audio, optional two-pass VP9 and 10-bit color
@@ -117,19 +111,18 @@ End credits, the hardest test, small text stays readable:
 
 ## How it compares
 
-HandBrake and Shutter Encoder are excellent, more powerful, general-purpose tools. This table is not "mine is better" — it is "mine is narrower." WebM Compressor only wins when your job is specifically *small, valid WebM for a course/LMS upload, with zero fiddling*.
+HandBrake and Shutter Encoder are excellent, more powerful, general-purpose tools. This table is not about being better than them. It is about being narrower: WebM Compressor is built for one job, a small and valid WebM for a course or LMS upload, with nothing to configure.
 
-| | **WebM Compressor** | HandBrake | Shutter Encoder | Boram |
+| | WebM Compressor | HandBrake | Shutter Encoder | Boram |
 |---|---|---|---|---|
-| WebM / VP9 / AV1 as the *only* job | ✅ | ⚠️ one of ~50 options | ⚠️ one of many | ✅ |
-| Presets tuned for lecture / LMS upload | ✅ | ❌ generic | ❌ generic | ❌ built for short clips |
-| Re-verifies every output is valid WebM | ✅ | ❌ | ❌ | ❌ |
-| Designed for multi-GB lecture files | ✅ | ✅ | ✅ | ⚠️ short clips |
-| Fully offline / no upload / no telemetry | ✅ | ✅ | ✅ | ✅ |
-| Actively maintained (2026) | ✅ | ✅ | ✅ | ❌ inactive for years |
-| Also exports MP4 / H.264 / H.265 | ❌ by design | ✅ | ✅ | ⚠️ some |
+| WebM / VP9 / AV1 as the only job | ✅ | one of many options | one of many options | ✅ |
+| Presets tuned for lecture / LMS upload | ✅ | generic | generic | built for short clips |
+| Auto-checks every output is valid WebM | ✅ | not built in | not built in | not built in |
+| Built for multi-GB lecture files | ✅ | ✅ | ✅ | short clips |
+| Fully offline, no upload, no telemetry | ✅ | ✅ | ✅ | ✅ |
+| Actively maintained (2026) | ✅ | ✅ | ✅ | inactive for years |
 
-If you need MP4/H.265, editing, or device presets, use HandBrake or Shutter Encoder. If you just need a lecture turned into a small, guaranteed-valid WebM without learning codec settings, that is what this app is for.
+If you need MP4/H.265, editing, or device presets, HandBrake or Shutter Encoder are the right tools. If you just need a lecture turned into a small, valid WebM without learning codec settings, that is what this app is for.
 
 ## Install (users)
 
@@ -167,12 +160,12 @@ Input is decoded (on GPU when possible), optionally scaled, then encoded to VP9 
 MP4/H.264/H.265 carry patent and licensing baggage, and every other tool already does them well. WebM (VP9/AV1/Opus) is royalty-free, plays in every modern browser, and is ideal for LMS and course sites. Doing one format is what lets the presets be genuinely tuned instead of generic. Need MP4? Use HandBrake.
 
 **Is my video uploaded anywhere?**
-No. Everything runs on your PC — no server, no size caps, no accounts, no telemetry.
+No. Everything runs on your PC. No server, no size caps, no accounts, no telemetry.
 
 **Why is AV1 so slow?**
-AV1 is newer and more efficient, but far more compute-heavy to encode. It makes files ~20–30% smaller than VP9 at the cost of much longer encode time. For most course uploads the VP9 *LMS Upload* preset is the better trade.
+AV1 is newer and more efficient, but far more compute-heavy to encode. It makes files around 20-30% smaller than VP9 at the cost of much longer encode time. For most course uploads the VP9 *LMS Upload* preset is the better trade.
 
-**Windows shows a "Windows protected your PC" / SmartScreen warning — is it safe?**
+**Windows shows a "Windows protected your PC" / SmartScreen warning. Is it safe?**
 That warning appears for any app without an expensive code-signing certificate; it is not a sign anything is wrong. Click **More info → Run anyway**. The full source is public if you want to inspect or build it yourself.
 
 **Do I need to install FFmpeg myself?**
@@ -182,7 +175,7 @@ No. On first run the app downloads the official LGPL FFmpeg build automatically.
 No. A recent GPU speeds things up, but the app always falls back to CPU encoding, which works on any machine.
 
 **Can I use it commercially?**
-The license is PolyForm Noncommercial — free for any non-commercial use. Commercial use needs a separate license from the author.
+The license is PolyForm Noncommercial: free for any non-commercial use. Commercial use needs a separate license from the author.
 
 ## Contributing
 
