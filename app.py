@@ -48,6 +48,28 @@ VIDEO_EXTENSIONS = {
     ".mpg", ".mpeg", ".wmv", ".flv", ".ts", ".m2ts", ".3gp", ".mts"
 }
 
+# Engine UI labels <-> backend engine keys
+ENGINE_UI_TO_KEY = {"CPU": "cpu", "GPU": "gpu", "Hybrid": "hybrid", "Auto": "auto"}
+ENGINE_KEY_TO_SHORT = {"cpu": "CPU", "gpu": "GPU", "hybrid": "HYB", "auto": "AUTO"}
+
+# README anchor for the GPU compatibility popup link
+GPU_README_URL = "https://github.com/Double-Edged-AI/webm-compressor#gpu-acceleration--supported-hardware"
+
+# Shown while a two-pass job runs its analysis pass (user-selected wording)
+PASS1_HINT_TEXT = ("Pass 1 is analysis only - the encoder is studying the video "
+                   "for better quality. Encoding happens in pass 2.")
+
+
+def engine_row_label(task):
+    """Row suffix showing the REAL engine: 'AUTO>HYB' once auto has resolved."""
+    eng = getattr(task, "engine", "cpu")
+    resolved = getattr(task, "resolved_engine", None)
+    if eng == "auto" and resolved:
+        return "AUTO>" + ENGINE_KEY_TO_SHORT.get(resolved, "CPU")
+    if eng != "auto" and resolved and resolved != eng:
+        return ENGINE_KEY_TO_SHORT.get(eng, "CPU") + ">" + ENGINE_KEY_TO_SHORT.get(resolved, "CPU")
+    return ENGINE_KEY_TO_SHORT.get(eng, "CPU")
+
 
 def resource_path(relative):
     """Resolve bundled resource paths in both source and PyInstaller builds."""
@@ -150,16 +172,18 @@ class TaskRow:
         # 2. Preset & Details stacked
         duration_str = self._format_duration(task.metadata["duration"])
         size_str = self._format_size(task.metadata["size_bytes"])
-        profile_text = task.preset_name.replace(" WebM", "") + (" (GPU)" if task.use_gpu else " (CPU)")
+        profile_text = task.preset_name.replace(" WebM", "") + f" ({engine_row_label(task)})"
         _detail_font = ctk.CTkFont(family="Open Sans", size=11)
         self.details_row = ctk.CTkFrame(self.left_container, fg_color="transparent")
         self.details_row.pack(fill="x", anchor="w", pady=(0, 6))
-        self.seg_size = stable_value_label(self.details_row, 200, _detail_font, "#8E8E93",
+        self.seg_size = stable_value_label(self.details_row, 170, _detail_font, "#8E8E93",
                                            text=f"Size: {size_str}  •  {duration_str}")
         self.seg_size.pack(side="left")
-        self.seg_speed = stable_value_label(self.details_row, 95, _detail_font, "#8E8E93")
+        self.seg_speed = stable_value_label(self.details_row, 75, _detail_font, "#8E8E93")
         self.seg_speed.pack(side="left")
-        self.seg_eta = stable_value_label(self.details_row, 110, _detail_font, "#8E8E93")
+        self.seg_elapsed = stable_value_label(self.details_row, 75, _detail_font, "#8E8E93")
+        self.seg_elapsed.pack(side="left")
+        self.seg_eta = stable_value_label(self.details_row, 85, _detail_font, "#8E8E93")
         self.seg_eta.pack(side="left")
         self.seg_profile = stable_value_label(self.details_row, 150, _detail_font, "#8E8E93",
                                               text=self._fit_profile(profile_text))
@@ -233,32 +257,49 @@ class TaskRow:
             "Pending": "#BFA378",      # Apple Orange
             "Queued": "#8E8EDD",
             "Encoding": "#4EB18C",     # Apple Green
+            "Paused": "#BFA378",       # Amber while suspended
+            "Resuming": "#8E8EDD",
             "Completed": "#4EB18C",    # Apple Green
             "Failed": "#E8574A",       # Apple Red
             "Stopped": "#E8574A"       # Apple Red
         }
-        
+
         color = status_colors.get(task.status, "#ffffff")
-        
+
+        pass_pct = int(getattr(task, "pass_progress", 0.0))
         status_text = task.status
         if task.status == "Encoding":
-            status_text = f"Encoding ({int(task.progress)}%)"
-            if task.two_pass:
-                if task.progress < 50.0:
-                    # Pass 1 writes no output, so 0% is normal for a while - say
-                    # what is actually happening instead of a stuck-looking "0%".
-                    p1 = int(task.progress * 2)
-                    status_text = f"Analyzing (pass 1 of 2)…" if p1 < 1 else f"Pass 1 of 2 ({p1}%)"
-                else:
-                    status_text = f"Encoding (pass 2 of 2) ({int((task.progress - 50.0) * 2)}%)"
+            if task.two_pass and getattr(task, "pass_num", 0) == 1:
+                # Pass 1 writes no output file - it is a real analysis pass with
+                # its own live progress, elapsed and ETA (from FFmpeg time=).
+                status_text = "Pass 1/2: Analyzing…" if pass_pct < 1 else f"Pass 1/2: Analyzing ({pass_pct}%)"
+            elif task.two_pass and getattr(task, "pass_num", 0) == 2:
+                status_text = f"Pass 2/2: Encoding ({pass_pct}%)"
             elif task.progress < 1:
                 status_text = "Starting…"
+            else:
+                status_text = f"Encoding ({int(task.progress)}%)"
+        elif task.status == "Paused":
+            if task.two_pass and getattr(task, "pass_num", 0) == 1:
+                status_text = f"Paused (pass 1/2 at {pass_pct}%)"
+            else:
+                status_text = f"Paused ({int(task.progress)}%)"
+        elif task.status == "Resuming":
+            status_text = "Resuming…"
 
         self.status_label.configure(text=status_text, text_color=color)
 
+        # Bar shows the CURRENT pass 0-100 during two-pass work so pass 1 has a
+        # full visible progress run instead of crawling to the halfway mark.
+        active = task.status in ("Encoding", "Paused", "Resuming")
+        if active and task.two_pass:
+            bar_value = getattr(task, "pass_progress", 0.0)
+        else:
+            bar_value = task.progress
+
         # Never look frozen: pulse the bar while encoding at 0% real progress,
         # otherwise show the true value.
-        if task.status == "Encoding" and task.progress < 1:
+        if task.status == "Encoding" and bar_value < 1:
             if not getattr(self, "_pulsing", False):
                 self.progress_bar.configure(mode="indeterminate")
                 self.progress_bar.start()
@@ -268,25 +309,30 @@ class TaskRow:
                 self.progress_bar.stop()
                 self.progress_bar.configure(mode="determinate")
                 self._pulsing = False
-            self.progress_bar.set(task.progress / 100.0)
-            self.progress_bar.configure(progress_color=color if task.progress > 0 else "#31313F")
-        
-        self.preset_label_text = task.preset_name.replace(" WebM", "") + (" (GPU)" if task.use_gpu else " (CPU)")
-        
-        def _segs(size_txt, speed_txt, eta_txt, col):
+            self.progress_bar.set(bar_value / 100.0)
+            self.progress_bar.configure(progress_color=color if bar_value > 0 else "#31313F")
+
+        self.preset_label_text = task.preset_name.replace(" WebM", "") + f" ({engine_row_label(task)})"
+
+        def _segs(size_txt, speed_txt, elapsed_txt, eta_txt, col):
             self.seg_size.configure(text=size_txt, text_color=col)
             self.seg_speed.configure(text=speed_txt, text_color=col)
+            self.seg_elapsed.configure(text=elapsed_txt, text_color=col)
             self.seg_eta.configure(text=eta_txt, text_color=col)
             self.seg_profile.configure(text=self._fit_profile(self.preset_label_text), text_color="#8E8E93")
 
-        if task.status == "Encoding":
+        if task.status in ("Encoding", "Paused", "Resuming"):
             orig_size_str = self._format_size(task.metadata["size_bytes"])
             if task.est_size_bytes > 0:
                 size_text = f"~{self._format_size(task.est_size_bytes)} of {orig_size_str}"
             else:
                 size_text = f"Size: {orig_size_str}"
-            _segs(size_text, f"Speed {fmt_speed(task.speed)}",
-                  f"ETA {self._format_eta(task.eta)}", "#E5E5EA")
+            elapsed_text = f"Time {self._format_eta(max(0, task.elapsed))}"
+            if task.status == "Paused":
+                _segs(size_text, "Paused", elapsed_text, "", "#BFA378")
+            else:
+                eta_text = "Estimating…" if task.eta < 0 else f"ETA {self._format_eta(task.eta)}"
+                _segs(size_text, f"Speed {fmt_speed(task.speed)}", elapsed_text, eta_text, "#E5E5EA")
         elif task.status == "Completed":
             final_size_str = self._format_size(task.est_size_bytes)
             orig_size_str = self._format_size(task.metadata["size_bytes"])
@@ -295,14 +341,15 @@ class TaskRow:
                 reduction = int(((task.metadata["size_bytes"] - task.est_size_bytes) / task.metadata["size_bytes"]) * 100)
             _segs(f"Final: {final_size_str} of {orig_size_str}",
                   f"Saved {reduction}%" if reduction >= 0 else f"+{abs(reduction)}% LARGER",
+                  f"Time {self._format_eta(max(0, task.elapsed))}",
                   "Done",
                   "#4EB18C" if reduction >= 0 else "#E8574A")
         else:
             duration_str = self._format_duration(task.metadata["duration"])
             size_str = self._format_size(task.metadata["size_bytes"])
-            _segs(f"Size: {size_str}  •  {duration_str}", "", "", "#8E8E93")
-            
-        if task.status == "Encoding":
+            _segs(f"Size: {size_str}  •  {duration_str}", "", "", "", "#8E8E93")
+
+        if task.status in ("Encoding", "Paused", "Resuming"):
             self.delete_btn.configure(state="disabled")
             self.preview_btn.configure(state="disabled")
             self.select_cb.configure(state="disabled")
@@ -629,11 +676,11 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             ).pack(side="left")
             return card
 
-        # 1. Engine
+        # 1. Engine: CPU / GPU / Hybrid / Auto (Auto picks the best real mode)
         card_engine = _section("⚙  ENGINE")
         self.unit_toggle = ctk.CTkSegmentedButton(
             card_engine,
-            values=["CPU", "GPU (Fast, Lower Quality)"],
+            values=["CPU", "GPU", "Hybrid", "Auto"],
             command=self.on_unit_toggled,
             selected_color="#F4695C",
             selected_hover_color="#D95546",
@@ -644,8 +691,12 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             corner_radius=8,
             font=ctk.CTkFont(family="Open Sans", size=12)
         )
-        self.unit_toggle.pack(fill="x", padx=12, pady=(0, 11))
-        self.unit_toggle.set("CPU")
+        self.unit_toggle.pack(fill="x", padx=12, pady=(0, 4))
+        self.unit_toggle.set("Auto")
+        self.engine_hint = stable_value_label(
+            card_engine, 340, ctk.CTkFont(family="Open Sans", size=11),
+            "#8E8E93", text="Auto: best available mode is chosen per video")
+        self.engine_hint.pack(anchor="w", padx=12, pady=(0, 9))
 
         # 2. Profile & quality
         card_prof = _section("🎚  PROFILE & QUALITY")
@@ -809,9 +860,27 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         # Hidden label: _check_ffmpeg writes hardware details here; shown in the ⓘ popup
         self.spec_details = ctk.CTkLabel(sidebar, text="")
 
+    def _apply_gpu_status(self, active_gpus, decode_ok):
+        """Truthful sidebar capability line: encode, decode and hybrid state."""
+        if active_gpus:
+            gpu_text = (f"• GPU WebM encode: {', '.join(active_gpus)}\n"
+                        f"• Pipeline: Zero-Copy HW")
+        elif decode_ok:
+            gpu_text = ("• GPU WebM encode: none on this GPU\n"
+                        "• GPU decode: OK -> Hybrid mode ready")
+        else:
+            gpu_text = ("• GPU acceleration: not available\n"
+                        "• Pipeline: Software MT (CPU)")
+        self.spec_details.configure(text=(
+            f"• OS Platform: {sys.platform.upper()}\n"
+            f"• VP9 Row-MT: Active (ssim)\n"
+            f"• AV1 Tiling: SVT-AV1 P7\n"
+            f"{gpu_text}"
+        ))
+
     def show_system_info(self):
         from dialogs import themed_toplevel
-        win, body = themed_toplevel("System Details", width=380, height=230)
+        win, body = themed_toplevel("System Details", width=460, height=380)
         ctk.CTkLabel(
             body, text="DIAGNOSTIC TELEMETRY",
             font=ctk.CTkFont(family="Montserrat", size=12, weight="bold"),
@@ -822,6 +891,40 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             font=ctk.CTkFont(family="Open Sans", size=12),
             justify="left", text_color="#D8D8DE"
         ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            body, text="GPU CAPABILITY CHECKS",
+            font=ctk.CTkFont(family="Montserrat", size=12, weight="bold"),
+            text_color="#F4695C"
+        ).pack(anchor="w", pady=(12, 4))
+        diag_label = ctk.CTkLabel(
+            body, text="Running staged GPU diagnostics…",
+            font=ctk.CTkFont(family="Open Sans", size=11),
+            justify="left", text_color="#AEAEB2", wraplength=410, anchor="w"
+        )
+        diag_label.pack(anchor="w", fill="x")
+
+        def _diag_worker():
+            try:
+                from encoder import gpu_diagnostics
+                checks = gpu_diagnostics()
+                lines = []
+                for name, ok, detail in checks:
+                    mark = "✓" if ok else ("✕" if ok is False else "•")
+                    lines.append(f"{mark} {name}: {detail}")
+                text = "\n".join(lines)
+            except Exception as e:
+                text = f"Diagnostics failed: {e}"
+
+            def _apply():
+                try:
+                    if diag_label.winfo_exists():
+                        diag_label.configure(text=text)
+                except Exception:
+                    pass
+            self.after(0, _apply)
+
+        threading.Thread(target=_diag_worker, daemon=True).start()
 
     def _build_main_panel(self):
         # ── Main sheet: offset lower than the sidebar sheet (layered look) ──
@@ -953,6 +1056,15 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             text_color="#F2F2F4"
         )
         self.overall_progress_label.pack(anchor="w", padx=16, pady=(10, 3))
+        # Two-pass analysis explainer: packed only while a pass-1 job is active
+        self.pass_hint_label = ctk.CTkLabel(
+            self.progress_panel,
+            text=PASS1_HINT_TEXT,
+            font=ctk.CTkFont(family="Open Sans", size=11),
+            text_color="#BFA378",
+            anchor="w"
+        )
+        self._pass_hint_visible = False
         self.overall_progress_bar = ctk.CTkProgressBar(
             self.progress_panel,
             progress_color="#2E2E3C",  # matches track at 0% (no nub); teal once moving
@@ -998,7 +1110,37 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             command=self.stop_conversion
         )
         self.btn_stop.pack(side="right")
+
+        # Pause: truly suspends the FFmpeg process at OS level (no fake state)
+        self.btn_pause = ctk.CTkButton(
+            controls_frame,
+            text="⏸ Pause",
+            height=44,
+            width=130,
+            fg_color="transparent",
+            hover_color="#2A2415",
+            border_width=1,
+            border_color="#4A3F26",
+            text_color="#BFA378",
+            text_color_disabled="#5C5C66",
+            font=ctk.CTkFont(family="Open Sans", size=15, weight="bold"),
+            corner_radius=10,
+            state="disabled",
+            command=self.toggle_pause
+        )
+        self.btn_pause.pack(side="right", padx=(0, 10))
         self.refresh_start_button()
+
+    def toggle_pause(self):
+        """Pause/resume the active compression via OS process suspension."""
+        if self.queue.paused:
+            self.queue.resume()
+            self.btn_pause.configure(text="⏸ Pause")
+        else:
+            if self.queue.pause():
+                self.btn_pause.configure(text="▶ Resume")
+                self._get_taskbar().set_paused()
+        self.on_queue_update()
 
     def refresh_start_button(self):
         """Button label reflects how many queued videos are ticked for compression."""
@@ -1076,22 +1218,26 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         if ffmpeg_ok and ffprobe_ok:
             self.status_dot.configure(text_color="#4EB18C") # Green
             self.status_text.configure(text="Engine Link: ONLINE", text_color="#4EB18C")
-            
-            # Detect GPU status
-            hardware = detect_active_hardware_webm_encoders()
-            active_gpus = [k.upper() for k, v in hardware.items() if v]
-            if active_gpus:
-                gpu_text = f"• GPU WebM: {', '.join(active_gpus)}\n• Pipeline: Zero-Copy HW"
-            else:
-                gpu_text = "• GPU WebM: Unsupported (CPU Fallback)\n• Pipeline: Software MT"
-                
-            # Update specs box
             self.spec_details.configure(text=(
                 f"• OS Platform: {sys.platform.upper()}\n"
                 f"• VP9 Row-MT: Active (ssim)\n"
                 f"• AV1 Tiling: SVT-AV1 P7\n"
-                f"{gpu_text}"
+                f"• GPU: scanning…"
             ))
+
+            # GPU probing runs test encodes/decodes - do it off the UI thread
+            # (first cold run can take several seconds; results are cached)
+            def _detect_worker():
+                try:
+                    hardware = detect_active_hardware_webm_encoders()
+                    from encoder import is_hw_decode_available
+                    decode_ok = is_hw_decode_available()
+                    active_gpus = [k.upper() for k, v in hardware.items() if v]
+                    self.after(0, lambda: self._apply_gpu_status(active_gpus, decode_ok))
+                except Exception:
+                    pass
+
+            threading.Thread(target=_detect_worker, daemon=True).start()
         else:
             self.status_dot.configure(text_color="#E8574A") # Red
             self.status_text.configure(text="Engine Link: OFFLINE", text_color="#E8574A")
@@ -1166,16 +1312,50 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def get_selected_engine(self):
+        """Backend engine key (cpu/gpu/hybrid/auto) for the current selection."""
+        return ENGINE_UI_TO_KEY.get(self.unit_toggle.get(), "auto")
+
     def on_unit_toggled(self, val):
-        if val.startswith("GPU"):
+        engine = ENGINE_UI_TO_KEY.get(val, "auto")
+
+        # GPU compatibility notice with a clickable README link (once per mode
+        # per session; hardware facts do not change between clicks)
+        if engine in ("gpu", "hybrid") and engine not in getattr(self, "_gpu_notice_shown", set()):
+            self._gpu_notice_shown = getattr(self, "_gpu_notice_shown", set())
+            self._gpu_notice_shown.add(engine)
+            from dialogs import show_link_info
+            show_link_info(
+                "GPU Acceleration Compatibility",
+                "GPU acceleration requires compatible GPU hardware and drivers. "
+                "Support depends on NVIDIA/AMD/Intel hardware and FFmpeg encoder "
+                "support. Many GPUs can decode and scale video but cannot encode "
+                "WebM (VP9/AV1) - on those, the app automatically uses Hybrid "
+                "(GPU decode + CPU encode) or CPU mode.",
+                "Check supported GPUs and setup instructions here: GitHub README - GPU section",
+                GPU_README_URL
+            )
+
+        if engine == "gpu":
             hardware = detect_active_hardware_webm_encoders()
             if not any(hardware.values()):
                 from encoder import is_hw_decode_available
                 if is_hw_decode_available():
-                    messagebox.showinfo(
-                        "GPU-Assisted Hybrid Encoding Active",
-                        "GPU used for decode & scaling; VP9/AV1 encode runs on CPU (no GPU WebM encoder on this device)."
+                    fallback = messagebox.askyesno(
+                        "No GPU WebM Encoder On This Device",
+                        "This GPU cannot encode WebM (VP9/AV1) directly - NVIDIA "
+                        "cards below RTX 40 have no AV1 encoder and no NVIDIA card "
+                        "can encode VP9.\n\n"
+                        "GPU decoding works, so Hybrid mode (GPU decode + CPU "
+                        "encode) is available.\n\n"
+                        "Switch to Hybrid mode?"
                     )
+                    if fallback:
+                        self.unit_toggle.set("Hybrid")
+                        engine = "hybrid"
+                    else:
+                        self.unit_toggle.set("CPU")
+                        engine = "cpu"
                 else:
                     messagebox.showwarning(
                         "No GPU Acceleration Detected",
@@ -1183,9 +1363,29 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                         "The app will use pure CPU encoding to guarantee WebM output."
                     )
                     self.unit_toggle.set("CPU")
-                    val = "CPU"
+                    engine = "cpu"
+        elif engine == "hybrid":
+            from encoder import is_hw_decode_available
+            if not is_hw_decode_available():
+                messagebox.showwarning(
+                    "Hybrid Mode Unavailable",
+                    "No working GPU decoder was found on this system.\n\n"
+                    "The app will use pure CPU encoding to guarantee WebM output."
+                )
+                self.unit_toggle.set("CPU")
+                engine = "cpu"
 
-        if val.startswith("GPU"):
+        hints = {
+            "cpu": "CPU: software decode + encode (two-pass supported)",
+            "gpu": "GPU: hardware WebM encoder (RTX 40+/Arc class GPUs)",
+            "hybrid": "Hybrid: GPU decodes and scales, CPU encodes WebM",
+            "auto": "Auto: best available mode is chosen per video"
+        }
+        self.engine_hint.configure(text=hints.get(engine, ""))
+
+        # Two-pass applies to CPU and Hybrid engines; true GPU encoders have
+        # their own rate control and ignore VP9 pass logs.
+        if engine == "gpu":
             self.two_pass_cb.configure(state="disabled")
             self.two_pass_cb.deselect()
             self.av1_frame.pack_forget()
@@ -1215,7 +1415,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.update_crf_label(crf_val)
 
         # Control AV1 Preset slider visibility
-        if "AV1" in choice and not self.unit_toggle.get().startswith("GPU"):
+        if "AV1" in choice and self.get_selected_engine() != "gpu":
             self.av1_frame.pack(fill="x", pady=(5, 10))
         else:
             self.av1_frame.pack_forget()
@@ -1234,10 +1434,11 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
     def sync_all_options(self):
         preset_name = self.preset_dropdown.get()
-        use_gpu = self.unit_toggle.get().startswith("GPU")
+        engine = self.get_selected_engine()
         crf_val = int(self.crf_slider.get()) if preset_name != AUDIO_ONLY_PRESET else None
         two_pass = self.two_pass_cb.get()
         bit10 = self.bit10_cb.get()
+        fps_cap = 30 if self.fps30_cb.get() else None
         av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
         # Output paths are only assigned once the user has picked a save folder;
         # start_conversion re-finalizes them (and enforces the folder rule).
@@ -1246,10 +1447,13 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         for task in self.queue.tasks:
             if task.status in ["Pending", "Queued", "Stopped"]:
                 task.preset_name = preset_name
-                task.use_gpu = use_gpu
+                task.engine = engine
+                task.use_gpu = engine != "cpu"
+                task.resolved_engine = None
                 task.crf_override = crf_val
                 task.two_pass = two_pass
                 task.bit10 = bit10
+                task.fps_cap = fps_cap
                 task.av1_preset = av1_preset
                 if out_dir:
                     task.output_path = self.get_unique_output_path(out_dir, os.path.basename(task.input_path), ".webm")
@@ -1340,9 +1544,10 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         if preset_name == AUDIO_ONLY_PRESET:
             crf_val = None
 
-        use_gpu = self.unit_toggle.get().startswith("GPU")
+        engine = self.get_selected_engine()
         two_pass = self.two_pass_cb.get()
         bit10 = self.bit10_cb.get()
+        fps_cap = 30 if self.fps30_cb.get() else None
         av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
 
         # Save location is chosen (and validated) at compression start; output
@@ -1355,8 +1560,9 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             output_path = self.get_unique_output_path(out_dir, orig_name, ".webm") if out_dir else ""
 
             task = self.queue.add_task(
-                file_path, output_path, preset_name, use_gpu, crf_val,
-                two_pass=two_pass, bit10=bit10, av1_preset=av1_preset
+                file_path, output_path, preset_name, engine != "cpu", crf_val,
+                two_pass=two_pass, bit10=bit10, av1_preset=av1_preset,
+                engine=engine, fps_cap=fps_cap
             )
 
             row = TaskRow(
@@ -1480,11 +1686,12 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         crf_val = int(self.crf_slider.get())
         if preset_name == AUDIO_ONLY_PRESET:
             crf_val = None
-        use_gpu = self.unit_toggle.get().startswith("GPU")
+        engine = self.get_selected_engine()
         two_pass = self.two_pass_cb.get()
         bit10 = self.bit10_cb.get()
+        fps_cap = 30 if self.fps30_cb.get() else None
         av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
-        
+
         # Previews are temporary samples, not deliverables - they go to the
         # system temp folder and never touch (or require) the save location.
         import tempfile
@@ -1496,27 +1703,29 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         def run_thread():
             try:
-                final_path, final_size = generate_preview(
-                    task.input_path, 
-                    preview_path, 
-                    preset_name, 
-                    use_gpu, 
+                final_path, final_size, summary = generate_preview(
+                    task.input_path,
+                    preview_path,
+                    preset_name,
+                    engine != "cpu",
                     crf_val,
                     two_pass=two_pass,
                     bit10=bit10,
-                    av1_preset=av1_preset
+                    av1_preset=av1_preset,
+                    engine=engine,
+                    fps_cap=fps_cap
                 )
-                self.after(0, lambda: self.on_preview_finished(task, final_path, final_size))
+                self.after(0, lambda: self.on_preview_finished(task, final_path, final_size, summary))
             except Exception as e:
                 self.after(0, lambda: self.on_preview_failed(str(e)))
-                
+
         threading.Thread(target=run_thread, daemon=True).start()
 
-    def on_preview_finished(self, task, path, size):
+    def on_preview_finished(self, task, path, size, summary=None):
         if self.preview_window:
             self.preview_window.destroy()
             self.preview_window = None
-            
+
         orig_size = task.metadata["size_bytes"]
         ratio = 0
         if task.metadata["duration"] > 0:
@@ -1525,12 +1734,29 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         else:
             est_total_compressed = size
             ratio = 50
-            
-        msg = f"Preview sample generated successfully!\n\n"
+
+        msg = f"Preview sample generated with your EXACT job settings:\n\n"
+        if summary:
+            eng = summary.get("engine", "cpu").upper()
+            if summary.get("hybrid"):
+                eng += f" ({(summary.get('hybrid_accel') or '').upper()} decode + CPU encode)"
+            parts = [
+                f"Profile: {summary.get('profile')}",
+                f"Codec: {summary.get('codec')}"
+                + (f"  |  CRF {summary.get('crf')}" if summary.get("crf") is not None else ""),
+                f"Engine: {eng}",
+                f"Passes: {'Two-pass' if summary.get('two_pass') else 'Single-pass'}"
+                + ("  |  10-bit" if summary.get("bit10") else "")
+                + (f"  |  {summary.get('fps_cap')}fps cap" if summary.get("fps_cap") else "")
+            ]
+            if summary.get("av1_preset") is not None:
+                parts.append(f"SVT-AV1 preset: {summary.get('av1_preset')}")
+            msg += "\n".join(parts) + "\n\n"
         msg += f"Original Size: {self._format_size(orig_size)}\n"
-        msg += f"Est. Compressed Size: {self._format_size(est_total_compressed)} (~{ratio}% smaller)\n\n"
+        msg += f"Est. Compressed Size: ~{self._format_size(est_total_compressed)} (~{ratio}% smaller)\n"
+        msg += "Estimate is approximate - based on a 5-second mid-video sample.\n\n"
         msg += "Would you like to open the 5-second sample in your media player to review visual quality?"
-        
+
         res = messagebox.askyesno("Quality Preview Check", msg)
         if res:
             try:
@@ -1570,12 +1796,28 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             return
 
         preset_name = self.preset_dropdown.get()
-        use_gpu = self.unit_toggle.get().startswith("GPU")
+        engine = self.get_selected_engine()
         crf_val = int(self.crf_slider.get()) if preset_name != AUDIO_ONLY_PRESET else None
         two_pass = self.two_pass_cb.get()
         bit10 = self.bit10_cb.get()
         fps_cap = 30 if self.fps30_cb.get() else None
         av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
+
+        # GPU engine honesty check: never silently pretend to GPU-encode
+        if engine == "gpu":
+            hardware = detect_active_hardware_webm_encoders()
+            if not any(hardware.values()):
+                proceed = messagebox.askyesno(
+                    "GPU WebM Encoding Not Available",
+                    "This system has no working GPU WebM encoder (VP9/AV1).\n\n"
+                    "Continue in Auto mode instead? Auto will use Hybrid "
+                    "(GPU decode + CPU encode) when possible, otherwise CPU.\n\n"
+                    "No = cancel and change settings."
+                )
+                if not proceed:
+                    return
+                engine = "auto"
+                self.unit_toggle.set("Auto")
 
         # Warn when 10-bit is enabled but every source is 8-bit: it only makes
         # the encode slower and larger with no possible quality gain.
@@ -1639,7 +1881,9 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         for task in selected:
             task.preset_name = preset_name
-            task.use_gpu = use_gpu
+            task.engine = engine
+            task.use_gpu = engine != "cpu"
+            task.resolved_engine = None
             task.crf_override = crf_val
             task.two_pass = two_pass
             task.bit10 = bit10
@@ -1653,6 +1897,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         label = "Compressing 1 video…" if n == 1 else f"Compressing {n} videos…"
         self.btn_start.configure(state="disabled", text=label)
         self.btn_stop.configure(state="normal")
+        self.btn_pause.configure(state="normal", text="⏸ Pause")
         self.preset_dropdown.configure(state="disabled")
         self.crf_slider.configure(state="disabled")
         self.av1_slider.configure(state="disabled")
@@ -1668,22 +1913,31 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self._get_taskbar().clear()
         self.refresh_start_button()
         self.btn_stop.configure(state="disabled")
+        self.btn_pause.configure(state="disabled", text="⏸ Pause")
         self.preset_dropdown.configure(state="normal")
         self.unit_toggle.configure(state="normal")
 
         preset_name = self.preset_dropdown.get()
         if preset_name != AUDIO_ONLY_PRESET:
             self.crf_slider.configure(state="normal")
-            
-        if "AV1" in preset_name and not self.unit_toggle.get().startswith("GPU"):
+
+        if "AV1" in preset_name and self.get_selected_engine() != "gpu":
             self.av1_slider.configure(state="normal")
-            
-        if not self.unit_toggle.get().startswith("GPU"):
+
+        if self.get_selected_engine() != "gpu":
             self.two_pass_cb.configure(state="normal")
-            
+
         self.bit10_cb.configure(state="normal")
         self.output_entry.configure(state="normal")
         self.on_queue_update()
+
+    def destroy(self):
+        # Never leave a suspended FFmpeg process behind: resume + terminate
+        try:
+            self.queue.stop()
+        except Exception:
+            pass
+        super().destroy()
 
     def on_queue_update(self):
         # ffmpeg emits many progress lines per second; coalesce them to ~10
@@ -1711,19 +1965,20 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self._get_taskbar().clear()
         self.refresh_start_button()
         self.btn_stop.configure(state="disabled")
+        self.btn_pause.configure(state="disabled", text="⏸ Pause")
         self.preset_dropdown.configure(state="normal")
         self.unit_toggle.configure(state="normal")
 
         preset_name = self.preset_dropdown.get()
         if preset_name != AUDIO_ONLY_PRESET:
             self.crf_slider.configure(state="normal")
-            
-        if "AV1" in preset_name and not self.unit_toggle.get().startswith("GPU"):
+
+        if "AV1" in preset_name and self.get_selected_engine() != "gpu":
             self.av1_slider.configure(state="normal")
-            
-        if not self.unit_toggle.get().startswith("GPU"):
+
+        if self.get_selected_engine() != "gpu":
             self.two_pass_cb.configure(state="normal")
-            
+
         self.bit10_cb.configure(state="normal")
         self.output_entry.configure(state="normal")
         self._safe_ui_update()
@@ -1739,12 +1994,13 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         if not preset:
             return
             
-        use_gpu = self.unit_toggle.get().startswith("GPU")
+        engine = self.get_selected_engine()
         crf_val = int(self.crf_slider.get()) if preset_name != AUDIO_ONLY_PRESET else None
         two_pass = self.two_pass_cb.get()
         bit10 = self.bit10_cb.get()
+        fps_cap = 30 if self.fps30_cb.get() else None
         av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
-        
+
         # Build mock task to compile commands
         mock_metadata = {
             "duration": 60.0,
@@ -1754,12 +2010,15 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             "size_bytes": 10000000,
             "color_space": None,
             "color_transfer": None,
-            "color_primaries": None
+            "color_primaries": None,
+            "pix_fmt": None,
+            "fps": 30.0,
+            "codec_name": "h264"
         }
         mock_task = EncoderTask(
-            1, "input.mp4", "output.webm", preset_name, use_gpu, crf_val,
+            1, "input.mp4", "output.webm", preset_name, engine != "cpu", crf_val,
             two_pass=two_pass, bit10=bit10, av1_preset=av1_preset,
-            metadata_override=mock_metadata
+            metadata_override=mock_metadata, engine=engine, fps_cap=fps_cap
         )
         
         # Build CPU sample command
@@ -1788,16 +2047,31 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         else:
             # Try to build hybrid command
             mock_task.use_gpu = True
+            mock_task.engine = "hybrid"
+            mock_task.resolved_engine = None
             cmd = build_ffmpeg_command(mock_task, preset, None)
             if mock_task.hybrid_active:
                 gpu_cmd = " ".join(cmd) + "\n\n(Active: GPU-Assisted Hybrid Decode & Scale + CPU Encode)"
             else:
                 gpu_cmd = "No GPU WebM hardware encoding or hybrid decoding available (falls back to CPU command above)."
-            
+
+        # Real hardware proof captured from the last job's FFmpeg log
+        proof_block = ""
+        for t in reversed(self.queue.tasks):
+            lines = getattr(t, "hw_proof", None)
+            if lines:
+                proof_block = (
+                    f"\n--- LAST JOB HW PROOF ({os.path.basename(t.input_path)}) ---\n"
+                    + "\n".join(lines[:10]) + "\n"
+                )
+                break
+
         msg = (
-            f"Active Profile: {preset_name}\n\n"
+            f"Active Profile: {preset_name}\n"
+            f"Selected Engine: {self.unit_toggle.get()}\n\n"
             f"--- CPU PIPELINE COMMAND ---\n{cpu_cmd}\n\n"
-            f"--- GPU PIPELINE COMMAND ---\n{gpu_cmd}\n\n"
+            f"--- GPU PIPELINE COMMAND ---\n{gpu_cmd}\n"
+            f"{proof_block}\n"
             "Research Parameters Active:\n"
             "✓ WebM Container Locked (.webm only)\n"
             "✓ row-mt 1: Enabled multi-threaded row-based decoding.\n"
@@ -1896,15 +2170,34 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             status_str += f" ({failed} failed)"
 
         status_str += f" ({overall_pct}%)"
+        if self.queue.paused:
+            status_str += "  -  PAUSED"
 
         self.overall_progress_label.configure(text=status_str)
         self.overall_progress_bar.set(overall_pct / 100.0)
         self.overall_progress_bar.configure(
-            progress_color="#4EB18C" if overall_pct > 0 else "#2E2E3C"
+            progress_color="#BFA378" if self.queue.paused
+            else ("#4EB18C" if overall_pct > 0 else "#2E2E3C")
         )
 
+        # Two-pass analysis explainer under the overall label while pass 1 runs
+        pass1_active = any(
+            t.two_pass and getattr(t, "pass_num", 0) == 1
+            and t.status in ("Encoding", "Paused", "Resuming")
+            for t in self.queue.tasks
+        )
+        if pass1_active and not self._pass_hint_visible:
+            self.pass_hint_label.pack(anchor="w", padx=16, pady=(0, 3),
+                                      before=self.overall_progress_bar)
+            self._pass_hint_visible = True
+        elif not pass1_active and self._pass_hint_visible:
+            self.pass_hint_label.pack_forget()
+            self._pass_hint_visible = False
+
         # Mirror real progress onto the Windows taskbar icon (Explorer-style).
-        if self.queue.running:
+        if self.queue.paused:
+            self._get_taskbar().set_paused()
+        elif self.queue.running:
             self._get_taskbar().set_progress(overall_pct, 100)
         elif failed > 0 and completed + failed == total_tasks:
             self._get_taskbar().set_error()

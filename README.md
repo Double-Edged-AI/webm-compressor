@@ -38,10 +38,11 @@ The encoding itself is done by FFmpeg, like most video tools. What this app adds
 - 📦 **Large file support, no artificial size limit**: multi-GB lecture recordings are the design target
 - 🗂️ **Batch queue with per-video selection**: queue many files, tick which ones to compress, or run just one
 - 🖱️ **Drag and drop** videos straight into the window
-- ⚡ **CPU/GPU engine choice** with automatic hardware detection and CPU fallback (details below)
+- ⚡ **CPU / GPU / Hybrid / Auto engines** with verified hardware detection and honest CPU fallback (details below)
+- ⏸️ **True pause/resume**: the encoder process is suspended at OS level - no CPU/GPU use while paused, no corrupted output
 - 📁 **Required, respected save location**: output goes exactly where you choose, originals are never touched
 - 🔒 **Fully offline and private**: nothing is uploaded, no accounts, no telemetry
-- 📊 **Progress everywhere**: per-file bars, ETA, predicted output size, and real Windows taskbar progress
+- 📊 **Progress everywhere**: per-file bars, per-pass two-pass progress, smoothed ETA, elapsed time, predicted output size, and real Windows taskbar progress
 - 👀 **5-second quality preview** before committing to a long encode
 - 🎞️ **VP9** (libvpx) and **AV1** (SVT-AV1) with **Opus** audio, optional two-pass VP9 and 10-bit color
 - 📥 **FFmpeg auto-download on first run** (official LGPL build), no manual setup
@@ -58,7 +59,7 @@ The encoding itself is done by FFmpeg, like most video tools. What this app adds
 | 🧪 **Experimental AV1 - 1080p (Smallest, Slower)** | Around 20-30% smaller than VP9, but slower to encode |
 | 🎙️ **Audio Only - Opus (No Video)** | Podcast or audio-lecture versions of a course |
 
-## GPU acceleration
+## GPU acceleration & supported hardware
 
 The app can use your graphics card to speed things up, but full GPU encoding depends on your hardware:
 
@@ -70,9 +71,35 @@ The app can use your graphics card to speed things up, but full GPU encoding dep
 | Older GPUs (GTX, RTX 20/30, older AMD/Intel) | Hybrid mode: GPU decodes and scales, CPU encodes |
 | No GPU / unsupported | Automatic CPU encoding (always works) |
 
-There is nothing to configure. At startup the app tests your GPU with a real one-frame encode and picks the best available path. If a GPU step fails mid-job, the app retries the file on CPU automatically, so a job never fails because of GPU problems.
+**Why can't my NVIDIA card GPU-encode WebM?** CUDA, NVDEC and NVENC are different parts of the chip. NVDEC (the decoder) handles H.264/HEVC/VP9/AV1 on most modern cards. NVENC (the encoder) only produces H.264/HEVC on cards below the RTX 40 series, and **no NVIDIA card can encode VP9 at all**. WebM requires VP9 or AV1, so on RTX 20/30-class cards the honest maximum is Hybrid mode.
 
-**What you need installed:** just a normal, up-to-date graphics driver (GeForce/Adrenalin/Intel Graphics). FFmpeg with the required encoders is downloaded automatically on first run. Select "GPU" in the app to see which mode is active; the ⓘ button in the sidebar shows details.
+### Engine modes
+
+| Mode | What it does |
+|---|---|
+| **CPU** | Software decode + encode. Two-pass supported. Always works. |
+| **GPU** | Real hardware WebM encoding. Only offered when a working VP9/AV1 hardware encoder is verified with a test encode; otherwise the app asks before falling back. |
+| **Hybrid** | GPU decodes (and scales), CPU encodes VP9/AV1. Useful on cards that can decode but not encode WebM. Two-pass supported. |
+| **Auto** (default) | Picks the best real mode per video: GPU if a verified encoder exists, Hybrid if GPU decode works on a 1080p+ source, otherwise CPU. |
+
+The selected engine changes the actual FFmpeg command; the ⓘ Pipeline dialog shows the exact command line plus hardware-activity proof captured from the last job's FFmpeg log. If a GPU step fails mid-job, the app retries the file on CPU automatically, so a job never fails because of GPU problems.
+
+**What you need installed (Windows):** just a normal, up-to-date graphics driver (GeForce/Adrenalin/Intel Graphics). FFmpeg with the required encoders is downloaded automatically on first run. The ⓘ button in the sidebar runs staged GPU diagnostics.
+
+### Ubuntu / Linux GPU setup
+
+GPU acceleration on Linux needs three things; if any one is missing the app falls back to CPU:
+
+1. **NVIDIA driver with the video libraries.** The decode library `libnvcuvid.so.1` ships in the `libnvidia-decode-*` package (part of the standard driver, NOT part of CUDA). Check and fix:
+   ```bash
+   nvidia-smi                          # driver present?
+   ldconfig -p | grep libnvcuvid       # decode runtime present?
+   sudo apt install libnvidia-decode-$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | cut -d. -f1)
+   ```
+2. **An FFmpeg build with NVDEC support.** The `apt` FFmpeg on Ubuntu 20.04+ includes it. The **snap FFmpeg does not** - if `ffmpeg -hwaccels` does not list `cuda`, install FFmpeg from apt or use a [BtbN static build](https://github.com/BtbN/FFmpeg-Builds/releases).
+3. **Patience on first run.** The first CUDA initialization after boot can take several seconds; the app allows up to 20 seconds for the first GPU probe and caches the result.
+
+The ⓘ System Details dialog runs these exact checks and tells you which step failed.
 
 ## Benchmarks
 

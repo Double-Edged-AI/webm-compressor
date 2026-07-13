@@ -234,6 +234,37 @@ def _show(title, message, kind, buttons=("OK",)):
         return fn(title, message)
 
 
+def show_link_info(title, message, link_text, url, kind="info"):
+    """
+    Info dialog with a clickable hyperlink under the message. The link opens
+    in the default browser. Falls back to a plain dialog if theming fails.
+    """
+    import webbrowser
+    try:
+        dlg = _ThemedDialog(title, message, kind)
+        try:
+            shell = dlg.winfo_children()[0]
+            btn_row = shell.winfo_children()[-1]
+            link = ctk.CTkLabel(
+                shell, text=link_text,
+                font=ctk.CTkFont(family="Open Sans", size=13, underline=True),
+                text_color="#8E8EDD", cursor="hand2",
+                justify="left", wraplength=360, anchor="w"
+            )
+            link.pack(fill="x", padx=20, pady=(0, 2), before=btn_row)
+            link.bind("<Button-1>", lambda e: webbrowser.open(url))
+            dlg.update_idletasks()
+            w = max(420, dlg.winfo_reqwidth())
+            h = dlg.winfo_reqheight()
+            dlg.geometry(f"{w}x{h}")
+        except Exception:
+            pass  # dialog still works without the styled link
+        dlg.wait_window()
+        return dlg.result
+    except Exception:
+        return _show(title, f"{message}\n\n{link_text}: {url}", kind)
+
+
 def showinfo(title, message, **kw):
     return _show(title, message, "info")
 

@@ -58,6 +58,38 @@ them next to the executable if you want a self-contained folder. Do not
 redistribute FFmpeg builds without checking their license notes (see
 THIRD-PARTY-LICENSES.md).
 
+## GPU acceleration on Ubuntu (NVIDIA)
+
+GPU acceleration needs three things; if any one is missing the app quietly
+falls back to CPU. The app's ⓘ System Details dialog runs these exact checks
+and tells you which step failed.
+
+1. **NVIDIA driver with the video libraries.** The decode library
+   `libnvcuvid.so.1` ships in the `libnvidia-decode-*` package (part of the
+   standard driver, NOT part of CUDA):
+
+   ```bash
+   nvidia-smi                          # driver present?
+   ldconfig -p | grep libnvcuvid       # decode runtime present?
+   sudo apt install libnvidia-decode-$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | cut -d. -f1)
+   ```
+
+2. **An FFmpeg build with NVDEC support.** The apt FFmpeg on Ubuntu 20.04+
+   includes it. The snap FFmpeg does NOT. If `ffmpeg -hwaccels` does not list
+   `cuda`, install FFmpeg from apt or use a
+   [BtbN static build](https://github.com/BtbN/FFmpeg-Builds/releases).
+
+3. **Patience on first run.** The first CUDA initialization after boot can take
+   several seconds; the app allows up to 20 seconds for the first GPU probe and
+   caches the result.
+
+Note that NVIDIA cards cannot encode VP9 at all, and AV1 encoding needs an
+RTX 40-series or newer. On most NVIDIA cards the best real mode is therefore
+**Hybrid** (GPU decodes and scales, CPU encodes WebM), which the Auto engine
+picks for 1080p+ sources automatically. Intel iGPU/Arc systems can use VAAPI
+or Quick Sync the same way. See the main README's
+"GPU acceleration & supported hardware" section for the full engine-mode table.
+
 ## Known differences on Linux
 
 - No automatic FFmpeg download: install it with your package manager (step 1).
@@ -65,7 +97,5 @@ THIRD-PARTY-LICENSES.md).
 - The frameless rounded window relies on Windows-specific behavior; on Linux
   the window may appear with a standard frame or without rounded corners
   depending on your desktop environment.
-- GPU acceleration depends on your distribution's FFmpeg build having the
-  relevant hardware encoders/decoders compiled in (VAAPI on most systems).
-  The app falls back to CPU encoding automatically either way.
+- Pause/resume works on Linux too (SIGSTOP/SIGCONT instead of the Windows API).
 - Output is WebM-only on every platform. That rule does not change.

@@ -13,6 +13,8 @@ order may change. Suggestions are welcome via
 ### Considering
 - Portable / no-install build.
 - macOS and Linux builds (Linux run notes already exist in `README_LINUX.md`).
+- Automatic FFmpeg download on Linux (BtbN static builds, which include NVDEC;
+  avoids the snap FFmpeg trap described in `README_LINUX.md`).
 - Additional interface languages.
 
 ### Not planned (by design)
