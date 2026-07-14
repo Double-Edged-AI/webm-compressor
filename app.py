@@ -135,12 +135,13 @@ class TaskRow:
     Designed using Apple's Human Interface Guidelines (elevated flat card design).
     Fully responsive layout using horizontal flow packaging.
     """
-    def __init__(self, parent_frame, task, remove_callback, preview_callback, selection_callback=None, activate_callback=None):
+    def __init__(self, parent_frame, task, remove_callback, preview_callback, selection_callback=None, activate_callback=None, move_callback=None):
         self.task = task
         self.remove_callback = remove_callback
         self.preview_callback = preview_callback
         self.selection_callback = selection_callback
         self.activate_callback = activate_callback
+        self.move_callback = move_callback
 
         # Apple System Gray 5 elevated background with a very subtle border
         self.frame = ctk.CTkFrame(
@@ -168,10 +169,33 @@ class TaskRow:
         self.select_cb.pack(side="left", padx=(12, 0), pady=10)
 
         # Right container (actions)
-        self.right_container = ctk.CTkFrame(self.frame, fg_color="transparent", width=74)
+        self.right_container = ctk.CTkFrame(self.frame, fg_color="transparent", width=98)
         self.right_container.pack(side="right", padx=(6, 12), pady=10)
         self.right_container.pack_propagate(False)
         self.right_container.configure(height=34)
+
+        # Reorder arrows: encode order = queue order (top runs first)
+        if self.move_callback:
+            self.reorder_col = ctk.CTkFrame(self.right_container, fg_color="transparent", width=20)
+            self.reorder_col.pack(side="left", padx=(0, 2), fill="y")
+            self.reorder_col.pack_propagate(False)
+            self.up_btn = ctk.CTkButton(
+                self.reorder_col, text="▲", width=20, height=14,
+                fg_color="#333341", hover_color="#3D3D4C", text_color="#AEAEB2",
+                corner_radius=4, font=ctk.CTkFont(size=8),
+                command=lambda: self.move_callback(self.task.id, -1)
+            )
+            self.up_btn.pack(pady=(1, 1))
+            self.down_btn = ctk.CTkButton(
+                self.reorder_col, text="▼", width=20, height=14,
+                fg_color="#333341", hover_color="#3D3D4C", text_color="#AEAEB2",
+                corner_radius=4, font=ctk.CTkFont(size=8),
+                command=lambda: self.move_callback(self.task.id, +1)
+            )
+            self.down_btn.pack()
+        else:
+            self.up_btn = None
+            self.down_btn = None
 
         # Left container (details and progress)
         self.left_container = ctk.CTkFrame(self.frame, fg_color="transparent")
@@ -407,10 +431,16 @@ class TaskRow:
             self.delete_btn.configure(state="disabled")
             self.preview_btn.configure(state="disabled")
             self.select_cb.configure(state="disabled")
+            if self.up_btn:
+                self.up_btn.configure(state="disabled")
+                self.down_btn.configure(state="disabled")
         else:
             self.delete_btn.configure(state="normal")
             self.preview_btn.configure(state="normal")
             self.select_cb.configure(state="normal")
+            if self.up_btn:
+                self.up_btn.configure(state="normal")
+                self.down_btn.configure(state="normal")
 
     def _on_select_toggled(self):
         self.task.selected = bool(self.select_var.get())
@@ -548,8 +578,13 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         # window is up - close it as soon as the first frames have painted.
         self.after(150, self._close_splash)
 
-        # Escape stops editing a row (sidebar returns to defaults-for-new-files)
+        # Escape stops editing a row (sidebar returns to defaults-for-new-files);
+        # Ctrl+Up/Down reorders the selected row in the queue
         self.bind("<Escape>", lambda e: self.deselect_task())
+        self.bind("<Control-Up>", lambda e: self.selected_task_id
+                  and self.move_task_row(self.selected_task_id, -1))
+        self.bind("<Control-Down>", lambda e: self.selected_task_id
+                  and self.move_task_row(self.selected_task_id, +1))
         # Offer to restore the previous session's queue with its settings
         self.after(450, self._offer_queue_restore)
 
@@ -1822,7 +1857,8 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                 self.queue_frame, task, self.remove_task_row,
                 self.generate_quality_preview,
                 selection_callback=self._on_selection_toggled,
-                activate_callback=self.select_task
+                activate_callback=self.select_task,
+                move_callback=self.move_task_row
             )
             self.task_rows[task.id] = row
         self.refresh_overall_progress()
@@ -1932,7 +1968,8 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                 self.queue_frame, task, self.remove_task_row,
                 self.generate_quality_preview,
                 selection_callback=self._on_selection_toggled,
-                activate_callback=self.select_task
+                activate_callback=self.select_task,
+                move_callback=self.move_task_row
             )
             self.task_rows[task.id] = row
 
@@ -1981,6 +2018,35 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                 messagebox.showerror("Error", f"Could not create the save folder:\n{e}")
                 return None
         return out_dir
+
+    def move_task_row(self, task_id, delta):
+        """Move a queue row up/down; encode order follows queue order."""
+        if self.queue.running:
+            return  # order is already being consumed
+        selected_obj = self._task_by_id(self.selected_task_id) if self.selected_task_id else None
+        if not self.queue.move_task(task_id, delta):
+            return
+        # Ids were renumbered: rebuild the id->row map by task identity, then
+        # repack the row frames in the new order.
+        rows_by_obj = {id(row.task): row for row in self.task_rows.values()}
+        new_rows = {}
+        for t in self.queue.tasks:
+            row = rows_by_obj.get(id(t))
+            if row:
+                row.task = t
+                new_rows[t.id] = row
+        self.task_rows = new_rows
+        for t in self.queue.tasks:
+            row = self.task_rows.get(t.id)
+            if row:
+                row.frame.pack_forget()
+                row.frame.pack(fill="x", padx=10, pady=4)
+        if selected_obj is not None:
+            self.selected_task_id = selected_obj.id
+            for tid, row in self.task_rows.items():
+                row.set_active(tid == self.selected_task_id)
+        self._safe_ui_update()
+        self._schedule_queue_save()
 
     def remove_task_row(self, task_id):
         # Task ids are renumbered on removal; drop any active row selection

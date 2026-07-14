@@ -1229,6 +1229,25 @@ class EncodingQueue:
         if self.callback_on_update:
             self.callback_on_update()
 
+    def move_task(self, task_id, delta):
+        """
+        Swap a task with its neighbor (delta < 0 moves up, > 0 moves down) and
+        renumber ids to match the new order. The worker consumes tasks in list
+        order, so this directly controls encode order. Returns True on success.
+        """
+        idx = next((i for i, t in enumerate(self.tasks) if t.id == task_id), None)
+        if idx is None:
+            return False
+        j = idx + (1 if delta > 0 else -1)
+        if j < 0 or j >= len(self.tasks):
+            return False
+        self.tasks[idx], self.tasks[j] = self.tasks[j], self.tasks[idx]
+        for i, t in enumerate(self.tasks):
+            t.id = i + 1
+        if self.callback_on_update:
+            self.callback_on_update()
+        return True
+
     def remove_task(self, task_id):
         for idx, task in enumerate(self.tasks):
             if task.id == task_id:
