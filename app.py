@@ -420,12 +420,19 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self._apply_window_icon()
         self.after(400, self._apply_window_icon)
 
-        # ── Frameless rounded window (Option B) ─────────────────────────────
-        # Remove the native frame; paint the root a transparency-key color so
-        # the rounded shell's corners show the desktop through them.
-        self._frameless_suspended = False
+        # ── Borderless rounded window, natively managed ─────────────────────
+        # The title bar is stripped with Win32 styles (WS_CAPTION removed) while
+        # the window stays managed by Windows: taskbar button, Alt+Tab, and the
+        # native minimize/restore animations all keep working. This replaces the
+        # old overrideredirect approach, whose restore-frame/iconify/re-frameless
+        # dance caused visible flicker. Paint the root a transparency-key color
+        # so the rounded shell's corners show the desktop through them.
         self._is_maximized = False
-        self.overrideredirect(True)
+        # Hide until fully built and de-captioned: the window appears complete
+        # instead of flashing a native title bar and half-built widgets.
+        self.withdraw()
+        if sys.platform != "win32":
+            self.overrideredirect(True)  # non-Windows keeps the old behavior
         self.configure(fg_color="#010101")
         try:
             self.attributes("-transparentcolor", "#010101")
@@ -461,12 +468,24 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self._build_resize_grip()
         self._setup_drag_and_drop()
 
-        # Frameless windows drop off the taskbar - restore taskbar presence,
-        # then re-assert it whenever the window comes back from minimize.
-        self.after(20, self._make_taskbar_window)
-        self.bind("<Map>", self._on_map_restore, add="+")
+        # Strip the caption, then show the finished window. Re-assert the style
+        # on every map in case Tk reapplies its defaults after a state change.
+        self.update_idletasks()
+        self._apply_borderless_style()
+        self.deiconify()
+        self.bind("<Map>", lambda e: self.after(10, self._apply_borderless_style), add="+")
 
         self._check_ffmpeg()
+        # Frozen builds: the bootloader splash has done its job once the main
+        # window is up - close it as soon as the first frames have painted.
+        self.after(150, self._close_splash)
+
+    def _close_splash(self):
+        try:
+            import pyi_splash
+            pyi_splash.close()
+        except Exception:
+            pass  # not running from a frozen build
 
     # ── Frameless window plumbing ────────────────────────────────────────────
 
@@ -518,18 +537,45 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             return
         self.geometry(f"+{event.x_root - self._drag_dx}+{event.y_root - self._drag_dy}")
 
-    def _minimize_window(self):
-        # overrideredirect windows can't iconify: momentarily restore the
-        # native frame, minimize, then re-frameless on the way back (<Map>).
-        self._frameless_suspended = True
-        self.overrideredirect(False)
-        self.iconify()
+    def _apply_borderless_style(self):
+        """
+        Remove the native title bar while KEEPING the native frame bits
+        (thickframe + min/max boxes). The window remains managed by Windows,
+        so minimize/restore use the real DWM animations, the taskbar button
+        exists natively, and no overrideredirect flicker dance is needed.
+        Idempotent; safe to call repeatedly.
+        """
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            GWL_STYLE = -16
+            WS_CAPTION = 0x00C00000
+            WS_THICKFRAME = 0x00040000
+            WS_MINIMIZEBOX = 0x00020000
+            WS_MAXIMIZEBOX = 0x00010000
+            WS_SYSMENU = 0x00080000
+            SWP_FRAMECHANGED = 0x0020
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            SWP_NOACTIVATE = 0x0010
+            u32 = ctypes.windll.user32
+            hwnd = u32.GetParent(self.winfo_id()) or self.winfo_id()
+            style = u32.GetWindowLongW(hwnd, GWL_STYLE)
+            new_style = (style & ~WS_CAPTION) | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU
+            if new_style != style:
+                u32.SetWindowLongW(hwnd, GWL_STYLE, new_style)
+                u32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE
+                                 | SWP_NOZORDER | SWP_NOACTIVATE)
+                self._apply_window_icon()
+        except Exception:
+            pass
 
-    def _on_map_restore(self, event):
-        if self._frameless_suspended:
-            self._frameless_suspended = False
-            self.overrideredirect(True)
-            self.after(20, self._make_taskbar_window)
+    def _minimize_window(self):
+        # Natively managed window: plain iconify, with the real DWM animation.
+        self.iconify()
 
     def _toggle_maximize(self):
         import ctypes
@@ -558,23 +604,6 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                 u32.SystemParametersInfoW(48, 0, byref(r), 0)
             self.geometry(f"{r.right - r.left}x{r.bottom - r.top}+{r.left}+{r.top}")
             self._is_maximized = True
-
-    def _make_taskbar_window(self):
-        """Give the frameless window a taskbar button (WS_EX_APPWINDOW)."""
-        try:
-            import ctypes
-            GWL_EXSTYLE = -20
-            WS_EX_APPWINDOW = 0x00040000
-            WS_EX_TOOLWINDOW = 0x00000080
-            hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
-            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
-            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-            self.wm_withdraw()
-            self.after(10, self.wm_deiconify)
-            self.after(450, self._apply_window_icon)
-        except Exception:
-            pass
 
     def _build_resize_grip(self):
         grip = ctk.CTkLabel(
@@ -1182,39 +1211,47 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
     def _check_ffmpeg(self):
         """
         Verifies FFmpeg installation pathing and detects available hardware.
-        Uses detailed diagnostic message dialogs if failure occurs.
+        All subprocess probing runs OFF the UI thread so the dashboard paints
+        immediately; results (or failure dialogs) are posted back via after().
         """
-        from encoder import get_ffmpeg_path, get_ffprobe_path
-        ffmpeg_bin = get_ffmpeg_path()
-        ffprobe_bin = get_ffprobe_path()
-        
-        ffmpeg_ok = False
-        ffprobe_ok = False
-        ffmpeg_err = "None"
-        ffprobe_err = "None"
-        
-        try:
-            subprocess.run(
-                [ffmpeg_bin, "-version"], 
-                stdout=subprocess.DEVNULL, 
-                stderr=subprocess.DEVNULL, 
-                creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0
-            )
-            ffmpeg_ok = True
-        except Exception as e:
-            ffmpeg_err = str(e)
-            
-        try:
-            subprocess.run(
-                [ffprobe_bin, "-version"], 
-                stdout=subprocess.DEVNULL, 
-                stderr=subprocess.DEVNULL, 
-                creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0
-            )
-            ffprobe_ok = True
-        except Exception as e:
-            ffprobe_err = str(e)
-            
+        def worker():
+            from encoder import get_ffmpeg_path, get_ffprobe_path
+            ffmpeg_bin = get_ffmpeg_path()
+            ffprobe_bin = get_ffprobe_path()
+
+            ffmpeg_ok = False
+            ffprobe_ok = False
+            ffmpeg_err = "None"
+            ffprobe_err = "None"
+
+            try:
+                subprocess.run(
+                    [ffmpeg_bin, "-version"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+                ffmpeg_ok = True
+            except Exception as e:
+                ffmpeg_err = str(e)
+
+            try:
+                subprocess.run(
+                    [ffprobe_bin, "-version"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+                ffprobe_ok = True
+            except Exception as e:
+                ffprobe_err = str(e)
+
+            self.after(0, lambda: self._apply_ffmpeg_check(
+                ffmpeg_bin, ffprobe_bin, ffmpeg_ok, ffprobe_ok, ffmpeg_err, ffprobe_err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_ffmpeg_check(self, ffmpeg_bin, ffprobe_bin, ffmpeg_ok, ffprobe_ok, ffmpeg_err, ffprobe_err):
         if ffmpeg_ok and ffprobe_ok:
             self.status_dot.configure(text_color="#4EB18C") # Green
             self.status_text.configure(text="Engine Link: ONLINE", text_color="#4EB18C")

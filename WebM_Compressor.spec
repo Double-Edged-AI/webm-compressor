@@ -25,9 +25,18 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# Bootloader-level splash: appears the moment the exe starts, before Python
+# loads, and is closed by the app (pyi_splash) once the main window is ready.
+splash = Splash(
+    'assets/splash.png',
+    binaries=a.binaries,
+    datas=a.datas,
+)
+
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
     [],
     exclude_binaries=True,
     name='WebM_Compressor',
@@ -45,6 +54,7 @@ exe = EXE(
 )
 coll = COLLECT(
     exe,
+    splash.binaries,
     a.binaries,
     a.datas,
     strip=False,
