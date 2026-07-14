@@ -428,6 +428,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         # dance caused visible flicker. Paint the root a transparency-key color
         # so the rounded shell's corners show the desktop through them.
         self._is_maximized = False
+        self._frameless_suspended = False  # non-Windows minimize bookkeeping
         # Hide until fully built and de-captioned: the window appears complete
         # instead of flashing a native title bar and half-built widgets.
         self.withdraw()
@@ -473,7 +474,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.update_idletasks()
         self._apply_borderless_style()
         self.deiconify()
-        self.bind("<Map>", lambda e: self.after(10, self._apply_borderless_style), add="+")
+        self.bind("<Map>", self._on_map, add="+")
 
         self._check_ffmpeg()
         # Frozen builds: the bootloader splash has done its job once the main
@@ -573,9 +574,31 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         except Exception:
             pass
 
+    def _on_map(self, event=None):
+        if sys.platform == "win32":
+            # Re-assert the caption strip in case Tk reapplied its defaults
+            self.after(10, self._apply_borderless_style)
+        elif self._frameless_suspended:
+            # Linux/macOS: back from minimize, drop the temporary native frame
+            self._frameless_suspended = False
+            try:
+                self.overrideredirect(True)
+            except Exception:
+                pass
+
     def _minimize_window(self):
-        # Natively managed window: plain iconify, with the real DWM animation.
-        self.iconify()
+        if sys.platform == "win32":
+            # Natively managed window: plain iconify with the real DWM animation
+            self.iconify()
+            return
+        # Non-Windows keeps overrideredirect, which cannot iconify directly:
+        # restore the native frame momentarily, minimize, re-frameless on map.
+        try:
+            self._frameless_suspended = True
+            self.overrideredirect(False)
+            self.iconify()
+        except Exception:
+            self._frameless_suspended = False
 
     def _toggle_maximize(self):
         import ctypes
