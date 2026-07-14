@@ -13,17 +13,21 @@ and this project uses [semantic versioning](https://semver.org/).
 - GPU compatibility popup with a clickable link to the README hardware guide when selecting GPU or Hybrid.
 - Staged GPU diagnostics in the System Details dialog (driver, decode runtime, FFmpeg hwaccels, working WebM encoders, hybrid readiness) with Ubuntu fix hints.
 - Pipeline dialog shows hardware-activity proof captured from the last job's FFmpeg log.
+- Startup splash screen: appears the instant the exe launches and closes when the dashboard is ready.
 
 ### Changed
 - ETA is now computed from FFmpeg's real encode speed with rolling-average smoothing, shown per pass, and displays "Estimating..." until it is reliable instead of a wrong number.
 - Quality preview now uses the exact final job settings, including two-pass, engine mode and the 30fps cap, and labels its size estimate as approximate.
 - Elapsed time is shown for every running and finished job.
+- Minimize and restore now use the native Windows animations (the window is managed by Windows with only the title bar stripped).
+- Faster startup: FFmpeg checks and GPU detection run in the background after the window opens.
 
 ### Fixed
 - Ubuntu GPU detection: first-run hardware probes now allow up to 20 seconds for cold CUDA/driver initialization (previously 2-4s, causing false CPU fallbacks) and results are cached.
 - Two-pass ETA no longer assumes both passes run at the same speed.
 - Estimated output size during two-pass encoding no longer doubles the real value.
 - Sidebar no longer reports "GPU: Unsupported (CPU Fallback)" on systems where hybrid GPU decoding is active.
+- App icon is no longer clipped at the bottom in the taskbar, window title bar and File Explorer; the icon now ships in all standard sizes (16 to 256 px).
 
 ## [1.0.1] - 2026-07-11
 
