@@ -4,6 +4,19 @@ All notable changes to WebM Compressor are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [semantic versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-14
+
+### Added
+- Per-file compression settings: every queued video keeps its own profile, quality, engine, two-pass, 10-bit, fps-cap and AV1 settings. Click a row to edit that file's settings in the sidebar; press Escape or "done" to return to editing the defaults applied to newly added files.
+- "Apply These Settings to All Files" button for one-click batch stamping.
+- Per-row settings chip showing each file's plan at a glance (profile, CRF, passes, engine).
+- Per-file preview: the 5-second sample uses that file's own settings and now also reports an estimated encode time measured from the sample.
+- Destination preflight before compression: free-space check against the estimated output of all selected files (with a friendly choose-another-folder / continue / cancel dialog), write-permission probe, and long-path warning.
+- Queue persistence: the queue and every file's individual settings are restored (on request) when the app reopens.
+
+### Changed
+- Start-time warnings (10-bit on 8-bit sources, two-pass on large files, already-compressed inputs, GPU honesty) are now evaluated per file against that file's own settings.
+
 ## [1.1.0] - 2026-07-14
 
 ### Added
@@ -51,6 +64,7 @@ First public release.
 - Post-encode re-verification that every output is a valid WebM container/codec.
 - HDR color-tag preservation and safe timestamp handling for variable-framerate recordings.
 
+[1.2.0]: https://github.com/Double-Edged-AI/webm-compressor/releases/tag/v1.2.0
 [1.1.0]: https://github.com/Double-Edged-AI/webm-compressor/releases/tag/v1.1.0
 [1.0.1]: https://github.com/Double-Edged-AI/webm-compressor/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Double-Edged-AI/webm-compressor/releases/tag/v1.0.0

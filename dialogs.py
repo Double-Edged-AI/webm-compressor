@@ -90,7 +90,32 @@ class _ThemedDialog(ctk.CTkToplevel):
         btn_row = ctk.CTkFrame(shell, fg_color="transparent")
         btn_row.pack(fill="x", padx=18, pady=(8, 16))
 
-        if buttons == ("Yes", "No"):
+        if len(buttons) == 3:
+            # Three-way choice: [primary accent] [secondary outline] [cancel]
+            ctk.CTkButton(
+                btn_row, text=buttons[2], width=86, height=32,
+                fg_color="transparent", hover_color="#2A2A36",
+                border_width=1, border_color="#3A3A48",
+                text_color="#8E8E9C", corner_radius=8,
+                font=ctk.CTkFont(family="Open Sans", size=13),
+                command=lambda: self._close(buttons[2])
+            ).pack(side="right", padx=(8, 0))
+            ctk.CTkButton(
+                btn_row, text=buttons[1], width=130, height=32,
+                fg_color="transparent", hover_color="#2A2A36",
+                border_width=1, border_color="#3A3A48",
+                text_color="#C9C9D1", corner_radius=8,
+                font=ctk.CTkFont(family="Open Sans", size=13, weight="bold"),
+                command=lambda: self._close(buttons[1])
+            ).pack(side="right", padx=(8, 0))
+            ctk.CTkButton(
+                btn_row, text=buttons[0], width=170, height=32,
+                fg_color=spec["color"], hover_color=spec["color"],
+                text_color="#15151D", corner_radius=8,
+                font=ctk.CTkFont(family="Open Sans", size=13, weight="bold"),
+                command=lambda: self._close(buttons[0])
+            ).pack(side="right")
+        elif buttons == ("Yes", "No"):
             ctk.CTkButton(
                 btn_row, text="No", width=90, height=32,
                 fg_color="transparent", hover_color="#2A2A36",
@@ -279,3 +304,14 @@ def showerror(title, message, **kw):
 
 def askyesno(title, message, **kw):
     return bool(_show(title, message, "question", buttons=("Yes", "No")))
+
+
+def ask_choice3(title, message, primary, secondary, cancel="Cancel", kind="warning"):
+    """
+    Three-way themed dialog. Returns the label of the clicked button
+    (primary/secondary/cancel string), or cancel on Escape/close.
+    """
+    result = _show(title, message, kind, buttons=(primary, secondary, cancel))
+    if result in (primary, secondary, cancel):
+        return result
+    return cancel

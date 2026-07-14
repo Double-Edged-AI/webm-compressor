@@ -4,6 +4,8 @@
 
 import os
 import sys
+import json
+import time
 import tkinter as tk
 from tkinter import filedialog
 import dialogs as messagebox  # themed drop-in for tkinter.messagebox
@@ -71,6 +73,35 @@ def engine_row_label(task):
     return ENGINE_KEY_TO_SHORT.get(eng, "CPU")
 
 
+# Short profile names for the per-row settings chip
+PROFILE_SHORT = {
+    "LMS Upload": "LMS",
+    "High Quality": "HighQ",
+    "Balanced": "Bal",
+    "Small Size": "Small",
+    "Ultra Small": "Ultra",
+    "Experimental AV1": "AV1",
+    "Audio Only": "Audio",
+}
+
+
+def settings_chip(task):
+    """One-glance summary of a task's OWN settings, e.g. 'LMS · CRF32 · 2P · AUTO'."""
+    short = next((v for k, v in PROFILE_SHORT.items()
+                  if task.preset_name.startswith(k)), task.preset_name[:6])
+    parts = [short]
+    if task.crf_override is not None:
+        parts.append(f"CRF{task.crf_override}")
+    parts.append("2P" if task.two_pass else "1P")
+    parts.append(engine_row_label(task))
+    if task.bit10:
+        parts.append("10b")
+    if getattr(task, "fps_cap", None):
+        parts.append(f"{task.fps_cap}fps")
+    text = " · ".join(parts)
+    return text[:28] + "…" if len(text) > 29 else text
+
+
 def resource_path(relative):
     """Resolve bundled resource paths in both source and PyInstaller builds."""
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -104,17 +135,19 @@ class TaskRow:
     Designed using Apple's Human Interface Guidelines (elevated flat card design).
     Fully responsive layout using horizontal flow packaging.
     """
-    def __init__(self, parent_frame, task, remove_callback, preview_callback, selection_callback=None):
+    def __init__(self, parent_frame, task, remove_callback, preview_callback, selection_callback=None, activate_callback=None):
         self.task = task
         self.remove_callback = remove_callback
         self.preview_callback = preview_callback
         self.selection_callback = selection_callback
+        self.activate_callback = activate_callback
 
         # Apple System Gray 5 elevated background with a very subtle border
         self.frame = ctk.CTkFrame(
             parent_frame,
             fg_color="#262634",       # elevated row on queue sheet
             border_width=0,
+            border_color="#262634",
             corner_radius=10
         )
         self.frame.pack(fill="x", padx=10, pady=4)
@@ -172,11 +205,10 @@ class TaskRow:
         # 2. Preset & Details stacked
         duration_str = self._format_duration(task.metadata["duration"])
         size_str = self._format_size(task.metadata["size_bytes"])
-        profile_text = task.preset_name.replace(" WebM", "") + f" ({engine_row_label(task)})"
         _detail_font = ctk.CTkFont(family="Open Sans", size=11)
         self.details_row = ctk.CTkFrame(self.left_container, fg_color="transparent")
         self.details_row.pack(fill="x", anchor="w", pady=(0, 6))
-        self.seg_size = stable_value_label(self.details_row, 170, _detail_font, "#8E8E93",
+        self.seg_size = stable_value_label(self.details_row, 160, _detail_font, "#8E8E93",
                                            text=f"Size: {size_str}  •  {duration_str}")
         self.seg_size.pack(side="left")
         self.seg_speed = stable_value_label(self.details_row, 75, _detail_font, "#8E8E93")
@@ -185,8 +217,8 @@ class TaskRow:
         self.seg_elapsed.pack(side="left")
         self.seg_eta = stable_value_label(self.details_row, 85, _detail_font, "#8E8E93")
         self.seg_eta.pack(side="left")
-        self.seg_profile = stable_value_label(self.details_row, 150, _detail_font, "#8E8E93",
-                                              text=self._fit_profile(profile_text))
+        self.seg_profile = stable_value_label(self.details_row, 160, _detail_font, "#8E8E93",
+                                              text=settings_chip(task))
         self.seg_profile.pack(side="left")
 
         # 3. Progress Bar
@@ -237,6 +269,30 @@ class TaskRow:
             command=lambda: self.remove_callback(task.id)
         )
         self.delete_btn.pack(side="left", padx=3)
+
+        # Clicking anywhere on the row body selects it for editing in the
+        # sidebar (per-file settings). Buttons/checkbox keep their own actions.
+        if self.activate_callback:
+            for w in (self.frame, self.left_container, self.name_row,
+                      self.name_label, self.details_row, self.status_label,
+                      self.seg_size, self.seg_speed, self.seg_elapsed,
+                      self.seg_eta, self.seg_profile):
+                w.bind("<Button-1>", self._on_row_clicked)
+                try:
+                    w.configure(cursor="hand2")
+                except Exception:
+                    pass
+
+    def _on_row_clicked(self, event=None):
+        if self.activate_callback:
+            self.activate_callback(self.task.id)
+
+    def set_active(self, active):
+        """Accent border marks the row whose settings the sidebar is editing."""
+        self.frame.configure(
+            border_width=1 if active else 0,
+            border_color="#F4695C" if active else "#262634"
+        )
 
     def set_compressed_tag(self, visible):
         """Show/hide the amber 'already compressed' chip next to the filename."""
@@ -312,14 +368,12 @@ class TaskRow:
             self.progress_bar.set(bar_value / 100.0)
             self.progress_bar.configure(progress_color=color if bar_value > 0 else "#31313F")
 
-        self.preset_label_text = task.preset_name.replace(" WebM", "") + f" ({engine_row_label(task)})"
-
         def _segs(size_txt, speed_txt, elapsed_txt, eta_txt, col):
             self.seg_size.configure(text=size_txt, text_color=col)
             self.seg_speed.configure(text=speed_txt, text_color=col)
             self.seg_elapsed.configure(text=elapsed_txt, text_color=col)
             self.seg_eta.configure(text=eta_txt, text_color=col)
-            self.seg_profile.configure(text=self._fit_profile(self.preset_label_text), text_color="#8E8E93")
+            self.seg_profile.configure(text=settings_chip(task), text_color="#8E8E93")
 
         if task.status in ("Encoding", "Paused", "Resuming"):
             orig_size_str = self._format_size(task.metadata["size_bytes"])
@@ -357,11 +411,6 @@ class TaskRow:
             self.delete_btn.configure(state="normal")
             self.preview_btn.configure(state="normal")
             self.select_cb.configure(state="normal")
-
-    def _fit_profile(self, profile_text):
-        """Ellipsize the profile so its fixed 150px segment never overflows."""
-        t = str(profile_text)
-        return "Profile: " + (t[:17] + "…" if len(t) > 18 else t)
 
     def _on_select_toggled(self):
         self.task.selected = bool(self.select_var.get())
@@ -453,6 +502,26 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.preview_window = None
         self.taskbar = None  # created lazily once the window has a real HWND
 
+        # Per-file settings model: every queued video keeps its OWN settings.
+        # The sidebar edits the selected row, or these defaults (applied to
+        # newly added files) when no row is selected.
+        self.selected_task_id = None
+        self.default_settings = {
+            "preset_name": "LMS Upload - VP9 1080p (Recommended)",
+            "engine": "auto",
+            "crf": 32,
+            "two_pass": False,
+            "bit10": False,
+            "fps_cap": None,
+            "av1_preset": 8,
+        }
+        self._loading_sidebar = False
+        self._save_pending = False
+        self.queue_state_path = os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+            "WebM Compressor", "queue_state.json"
+        )
+
         # Shell layout: title bar row + two-sheet content row.
         # Sidebar column is FROZEN (weight 0 + fixed frame width): dynamic
         # text in it can never push the main panel around.
@@ -478,6 +547,11 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         # Frozen builds: the bootloader splash has done its job once the main
         # window is up - close it as soon as the first frames have painted.
         self.after(150, self._close_splash)
+
+        # Escape stops editing a row (sidebar returns to defaults-for-new-files)
+        self.bind("<Escape>", lambda e: self.deselect_task())
+        # Offer to restore the previous session's queue with its settings
+        self.after(450, self._offer_queue_restore)
 
     def _close_splash(self):
         try:
@@ -727,6 +801,23 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             ).pack(side="left")
             return card
 
+        # 0. Edit-target banner: which file (or the defaults) the sidebar edits
+        target_bar = ctk.CTkFrame(sidebar, fg_color="#2B2B39", corner_radius=10)
+        target_bar.pack(fill="x", padx=14, pady=(2, 3))
+        self.edit_target_label = ctk.CTkLabel(
+            target_bar, text="DEFAULTS FOR NEW FILES",
+            font=ctk.CTkFont(family="Montserrat", size=10, weight="bold"),
+            text_color="#8F8F9A", anchor="w"
+        )
+        self.edit_target_label.pack(side="left", padx=12, pady=5)
+        self.edit_stop_btn = ctk.CTkButton(
+            target_bar, text="done", width=44, height=18,
+            fg_color="#333341", hover_color="#3D3D4C", text_color="#C9C9D1",
+            corner_radius=6, font=ctk.CTkFont(family="Open Sans", size=10),
+            command=self.deselect_task
+        )
+        # packed only while a row is being edited (see select_task)
+
         # 1. Engine: CPU / GPU / Hybrid / Auto (Auto picks the best real mode)
         card_engine = _section("⚙  ENGINE")
         self.unit_toggle = ctk.CTkSegmentedButton(
@@ -845,7 +936,21 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             text_color="#D8D8DE",
             command=self.sync_all_options
         )
-        self.fps30_cb.pack(anchor="w", padx=12, pady=(0, 10))
+        self.fps30_cb.pack(anchor="w", padx=12, pady=(0, 6))
+
+        # Batch convenience: stamp the current sidebar settings onto every file
+        self.apply_all_btn = ctk.CTkButton(
+            card_adv,
+            text="Apply These Settings to All Files",
+            height=26,
+            fg_color="#333341",
+            hover_color="#3D3D4C",
+            text_color="#D8D8DE",
+            corner_radius=8,
+            font=ctk.CTkFont(family="Open Sans", size=11),
+            command=self.apply_settings_to_all
+        )
+        self.apply_all_btn.pack(fill="x", padx=12, pady=(0, 10))
 
         # 4. Destination (required)
         card_dest = ctk.CTkFrame(sidebar, fg_color="#2B2B39", corner_radius=12)
@@ -1491,34 +1596,228 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.av1_value_label.configure(text=f"Preset: {preset_val} (Speed/Quality dial)")
         self.sync_all_options()
 
-    def sync_all_options(self):
+    # ── Per-file settings model ──────────────────────────────────────────
+    # Every queued video keeps its own settings. The sidebar is a live editor
+    # for exactly one target: the selected queue row, or (when nothing is
+    # selected) the defaults snapshot applied to newly added files.
+
+    def _task_by_id(self, task_id):
+        for t in self.queue.tasks:
+            if t.id == task_id:
+                return t
+        return None
+
+    def _read_sidebar_settings(self):
         preset_name = self.preset_dropdown.get()
-        engine = self.get_selected_engine()
-        crf_val = int(self.crf_slider.get()) if preset_name != AUDIO_ONLY_PRESET else None
-        two_pass = self.two_pass_cb.get()
-        bit10 = self.bit10_cb.get()
-        fps_cap = 30 if self.fps30_cb.get() else None
-        av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
-        # Output paths are only assigned once the user has picked a save folder;
-        # start_conversion re-finalizes them (and enforces the folder rule).
-        out_dir = self.get_selected_output_dir()
+        return {
+            "preset_name": preset_name,
+            "engine": self.get_selected_engine(),
+            "crf": int(self.crf_slider.get()) if preset_name != AUDIO_ONLY_PRESET else None,
+            "two_pass": bool(self.two_pass_cb.get()),
+            "bit10": bool(self.bit10_cb.get()),
+            "fps_cap": 30 if self.fps30_cb.get() else None,
+            "av1_preset": int(self.av1_slider.get()) if "AV1" in preset_name else None,
+        }
 
-        for task in self.queue.tasks:
-            if task.status in ["Pending", "Queued", "Stopped"]:
-                task.preset_name = preset_name
-                task.engine = engine
-                task.use_gpu = engine != "cpu"
-                task.resolved_engine = None
-                task.crf_override = crf_val
-                task.two_pass = two_pass
-                task.bit10 = bit10
-                task.fps_cap = fps_cap
-                task.av1_preset = av1_preset
-                if out_dir:
-                    task.output_path = self.get_unique_output_path(out_dir, os.path.basename(task.input_path), ".webm")
+    def _apply_settings_to_task(self, task, s):
+        task.preset_name = s["preset_name"]
+        task.engine = s["engine"]
+        task.use_gpu = s["engine"] != "cpu"
+        task.resolved_engine = None
+        task.crf_override = s["crf"]
+        task.two_pass = s["two_pass"]
+        task.bit10 = s["bit10"]
+        task.fps_cap = s["fps_cap"]
+        task.av1_preset = s["av1_preset"]
 
+    def _task_settings(self, task):
+        return {
+            "preset_name": task.preset_name,
+            "engine": task.engine,
+            "crf": task.crf_override,
+            "two_pass": bool(task.two_pass),
+            "bit10": bool(task.bit10),
+            "fps_cap": task.fps_cap,
+            "av1_preset": task.av1_preset,
+        }
+
+    def _load_sidebar_from(self, s):
+        """Reflect a settings dict in the sidebar WITHOUT firing write-through."""
+        self._loading_sidebar = True
+        try:
+            preset_name = s.get("preset_name") or "LMS Upload - VP9 1080p (Recommended)"
+            if preset_name not in PRESETS:
+                preset_name = "LMS Upload - VP9 1080p (Recommended)"
+            self.preset_dropdown.set(preset_name)
+            ui_engine = {v: k for k, v in ENGINE_UI_TO_KEY.items()}.get(s.get("engine", "auto"), "Auto")
+            self.unit_toggle.set(ui_engine)
+            crf = s.get("crf")
+            if preset_name == AUDIO_ONLY_PRESET or crf is None:
+                self.crf_slider.configure(state="disabled")
+                self.update_crf_label(None)
+            else:
+                self.crf_slider.configure(state="normal")
+                self.crf_slider.set(crf)
+                self.update_crf_label(crf)
+            (self.two_pass_cb.select if s.get("two_pass") else self.two_pass_cb.deselect)()
+            (self.bit10_cb.select if s.get("bit10") else self.bit10_cb.deselect)()
+            (self.fps30_cb.select if s.get("fps_cap") else self.fps30_cb.deselect)()
+            av1 = s.get("av1_preset")
+            if av1 is not None:
+                self.av1_slider.set(av1)
+                self.av1_value_label.configure(text=f"Preset: {av1} (Speed/Quality dial)")
+            if s.get("engine") == "gpu":
+                self.two_pass_cb.configure(state="disabled")
+            else:
+                self.two_pass_cb.configure(state="normal")
+            if "AV1" in preset_name and s.get("engine") != "gpu":
+                self.av1_frame.pack(fill="x", pady=(5, 10))
+            else:
+                self.av1_frame.pack_forget()
+        finally:
+            self._loading_sidebar = False
+
+    def select_task(self, task_id):
+        """Row clicked: the sidebar becomes this file's settings editor."""
+        if self.queue.running:
+            return  # settings are locked while compressing
+        if self.selected_task_id == task_id:
+            self.deselect_task()
+            return
+        task = self._task_by_id(task_id)
+        if not task or task.status not in ["Pending", "Queued", "Stopped", "Failed"]:
+            return
+        self.selected_task_id = task_id
+        for tid, row in self.task_rows.items():
+            row.set_active(tid == task_id)
+        name = os.path.basename(task.input_path)
+        if len(name) > 30:
+            name = name[:27] + "…"
+        self.edit_target_label.configure(text=f"✎ EDITING: {name}", text_color="#F4695C")
+        self.edit_stop_btn.pack(side="right", padx=(0, 8))
+        self._load_sidebar_from(self._task_settings(task))
+
+    def deselect_task(self):
+        """Sidebar returns to editing the defaults for newly added files."""
+        self.selected_task_id = None
+        for row in self.task_rows.values():
+            row.set_active(False)
+        self.edit_target_label.configure(text="DEFAULTS FOR NEW FILES", text_color="#8F8F9A")
+        self.edit_stop_btn.pack_forget()
+        self._load_sidebar_from(self.default_settings)
+
+    def apply_settings_to_all(self):
+        editable = [t for t in self.queue.tasks
+                    if t.status in ["Pending", "Queued", "Stopped", "Failed"]]
+        if not editable:
+            messagebox.showinfo("Nothing to Apply", "Add videos to the queue first.")
+            return
+        proceed = messagebox.askyesno(
+            "Apply to All Files",
+            f"Apply the current settings to all {len(editable)} queued video(s)?\n\n"
+            "Each file's individual settings will be replaced."
+        )
+        if not proceed:
+            return
+        s = self._read_sidebar_settings()
+        self.default_settings = dict(s)
+        for t in editable:
+            self._apply_settings_to_task(t, s)
+        self._safe_ui_update()
         self.refresh_compressed_tags()
-        self.on_queue_update()
+        self._schedule_queue_save()
+
+    def sync_all_options(self):
+        """
+        Write-through from the sidebar to the CURRENT EDIT TARGET only: the
+        selected queue row, or the defaults for newly added files. No other
+        file's settings are ever touched (that was the old design's bug).
+        """
+        if self._loading_sidebar:
+            return
+        s = self._read_sidebar_settings()
+        task = self._task_by_id(self.selected_task_id) if self.selected_task_id else None
+        if task and task.status in ["Pending", "Queued", "Stopped", "Failed"]:
+            self._apply_settings_to_task(task, s)
+            row = self.task_rows.get(task.id)
+            if row:
+                row.update(task)
+                row.set_compressed_tag(self._is_already_compressed(task))
+        else:
+            self.default_settings = s
+        self.refresh_kpis()
+        self._schedule_queue_save()
+
+    # ── Queue persistence: the queue survives app restarts, settings intact ──
+
+    def _schedule_queue_save(self):
+        if self._save_pending:
+            return
+        self._save_pending = True
+        self.after(1500, self._save_queue_state)
+
+    def _save_queue_state(self):
+        self._save_pending = False
+        try:
+            os.makedirs(os.path.dirname(self.queue_state_path), exist_ok=True)
+            data = {
+                "version": 1,
+                "defaults": self.default_settings,
+                "out_dir": self.get_selected_output_dir() or "",
+                "tasks": [t.to_dict() for t in self.queue.tasks],
+            }
+            with open(self.queue_state_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=1)
+        except Exception as e:
+            print(f"Queue autosave failed: {e}")
+
+    def _offer_queue_restore(self):
+        try:
+            with open(self.queue_state_path, encoding="utf-8") as f:
+                data = json.load(f)
+            saved = [d for d in data.get("tasks", [])
+                     if os.path.exists(d.get("input_path", ""))]
+        except Exception:
+            return
+        if not saved or self.queue.tasks:
+            return
+        proceed = messagebox.askyesno(
+            "Restore Previous Queue",
+            f"Restore your previous queue ({len(saved)} video(s), each with its "
+            "own saved settings)?"
+        )
+        if not proceed:
+            try:
+                os.remove(self.queue_state_path)
+            except Exception:
+                pass
+            return
+
+        if data.get("defaults"):
+            self.default_settings.update(data["defaults"])
+            self._load_sidebar_from(self.default_settings)
+        out_dir = data.get("out_dir")
+        if out_dir and os.path.isdir(out_dir):
+            self.output_entry.delete(0, tk.END)
+            self.output_entry.insert(0, out_dir)
+            self.dest_badge.configure(text="✓ set", text_color="#4EB18C")
+
+        if self.empty_label:
+            self.empty_label.destroy()
+            self.empty_label = None
+        for d in saved:
+            task = EncoderTask.from_dict(len(self.queue.tasks) + 1, d)
+            self.queue.tasks.append(task)
+            row = TaskRow(
+                self.queue_frame, task, self.remove_task_row,
+                self.generate_quality_preview,
+                selection_callback=self._on_selection_toggled,
+                activate_callback=self.select_task
+            )
+            self.task_rows[task.id] = row
+        self.refresh_overall_progress()
+        self.refresh_start_button()
+        self.refresh_compressed_tags()
 
     def update_crf_label(self, val):
         desc = "Medium"
@@ -1598,16 +1897,11 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             self.empty_label.destroy()
             self.empty_label = None
 
-        preset_name = self.preset_dropdown.get()
-        crf_val = int(self.crf_slider.get())
-        if preset_name == AUDIO_ONLY_PRESET:
-            crf_val = None
-
-        engine = self.get_selected_engine()
-        two_pass = self.two_pass_cb.get()
-        bit10 = self.bit10_cb.get()
-        fps_cap = 30 if self.fps30_cb.get() else None
-        av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
+        # New files snapshot the CURRENT DEFAULTS; each then keeps its own
+        # settings independently (edit by clicking the row).
+        d = dict(self.default_settings)
+        crf_val = d["crf"] if d["preset_name"] != AUDIO_ONLY_PRESET else None
+        av1_preset = d["av1_preset"] if "AV1" in d["preset_name"] else None
 
         # Save location is chosen (and validated) at compression start; output
         # paths are finalized there. Rows can exist without a destination yet.
@@ -1619,29 +1913,31 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             output_path = self.get_unique_output_path(out_dir, orig_name, ".webm") if out_dir else ""
 
             task = self.queue.add_task(
-                file_path, output_path, preset_name, engine != "cpu", crf_val,
-                two_pass=two_pass, bit10=bit10, av1_preset=av1_preset,
-                engine=engine, fps_cap=fps_cap
+                file_path, output_path, d["preset_name"], d["engine"] != "cpu", crf_val,
+                two_pass=d["two_pass"], bit10=d["bit10"], av1_preset=av1_preset,
+                engine=d["engine"], fps_cap=d["fps_cap"]
             )
 
             row = TaskRow(
                 self.queue_frame, task, self.remove_task_row,
-                self.generate_quality_preview, selection_callback=self._on_selection_toggled
+                self.generate_quality_preview,
+                selection_callback=self._on_selection_toggled,
+                activate_callback=self.select_task
             )
             self.task_rows[task.id] = row
 
         self.refresh_overall_progress()
         self.refresh_start_button()
         self.refresh_compressed_tags()
+        self._schedule_queue_save()
 
     def _is_already_compressed(self, task):
-        """True when the input's bitrate is below what the current preset produces."""
-        preset_name = self.preset_dropdown.get()
-        if preset_name == AUDIO_ONLY_PRESET:
+        """True when the input's bitrate is below what THIS TASK's settings produce."""
+        if task.preset_name == AUDIO_ONLY_PRESET or task.preset_name not in PRESETS:
             return False
         in_bps = task.metadata.get("bitrate", 0)
         expected = estimate_typical_output_bitrate(
-            preset_name, int(self.crf_slider.get()), task.metadata.get("height", 1080)
+            task.preset_name, task.crf_override, task.metadata.get("height", 1080)
         )
         return bool(in_bps and expected and in_bps < expected * 0.8)
 
@@ -1677,6 +1973,8 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         return out_dir
 
     def remove_task_row(self, task_id):
+        # Task ids are renumbered on removal; drop any active row selection
+        self.deselect_task()
         self.queue.remove_task(task_id)
         if task_id in self.task_rows:
             self.task_rows[task_id].destroy()
@@ -1697,12 +1995,15 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.task_rows = new_task_rows
         self.on_queue_update()
         self.refresh_start_button()
+        self._schedule_queue_save()
 
     def clear_queue(self):
+        self.deselect_task()
         self.queue.clear()
         for row in self.task_rows.values():
             row.destroy()
         self.task_rows.clear()
+        self._schedule_queue_save()
 
         if not self.empty_label:
             placeholder = "Drag & drop videos here, or click \"Add Videos…\"\n\nOutput is always WebM." if DND_AVAILABLE \
@@ -1741,15 +2042,8 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         _pv_bar.pack(fill="x", pady=(14, 4))
         _pv_bar.start()
 
-        preset_name = self.preset_dropdown.get()
-        crf_val = int(self.crf_slider.get())
-        if preset_name == AUDIO_ONLY_PRESET:
-            crf_val = None
-        engine = self.get_selected_engine()
-        two_pass = self.two_pass_cb.get()
-        bit10 = self.bit10_cb.get()
-        fps_cap = 30 if self.fps30_cb.get() else None
-        av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
+        # The preview uses THIS FILE's own settings, exactly as the final
+        # compression job will run them.
 
         # Previews are temporary samples, not deliverables - they go to the
         # system temp folder and never touch (or require) the save location.
@@ -1762,25 +2056,27 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         def run_thread():
             try:
+                t0 = time.time()
                 final_path, final_size, summary = generate_preview(
                     task.input_path,
                     preview_path,
-                    preset_name,
-                    engine != "cpu",
-                    crf_val,
-                    two_pass=two_pass,
-                    bit10=bit10,
-                    av1_preset=av1_preset,
-                    engine=engine,
-                    fps_cap=fps_cap
+                    task.preset_name,
+                    task.engine != "cpu",
+                    task.crf_override,
+                    two_pass=task.two_pass,
+                    bit10=task.bit10,
+                    av1_preset=task.av1_preset,
+                    engine=task.engine,
+                    fps_cap=task.fps_cap
                 )
-                self.after(0, lambda: self.on_preview_finished(task, final_path, final_size, summary))
+                wall = time.time() - t0
+                self.after(0, lambda: self.on_preview_finished(task, final_path, final_size, summary, wall))
             except Exception as e:
                 self.after(0, lambda: self.on_preview_failed(str(e)))
 
         threading.Thread(target=run_thread, daemon=True).start()
 
-    def on_preview_finished(self, task, path, size, summary=None):
+    def on_preview_finished(self, task, path, size, summary=None, wall=None):
         if self.preview_window:
             self.preview_window.destroy()
             self.preview_window = None
@@ -1813,7 +2109,13 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             msg += "\n".join(parts) + "\n\n"
         msg += f"Original Size: {self._format_size(orig_size)}\n"
         msg += f"Est. Compressed Size: ~{self._format_size(est_total_compressed)} (~{ratio}% smaller)\n"
-        msg += "Estimate is approximate - based on a 5-second mid-video sample.\n\n"
+        if wall and task.metadata["duration"] > 0:
+            est_secs = int(task.metadata["duration"] / 5.0 * wall)
+            m, s = divmod(est_secs, 60)
+            h, m = divmod(m, 60)
+            t_txt = f"{h}h {m:02d}m" if h else (f"{m}m {s:02d}s" if m else f"{s}s")
+            msg += f"Est. Encode Time: ~{t_txt} (measured from this sample)\n"
+        msg += "Estimates are approximate - based on a 5-second mid-video sample.\n\n"
         msg += "Would you like to open the 5-second sample in your media player to review visual quality?"
 
         res = messagebox.askyesno("Quality Preview Check", msg)
@@ -1854,74 +2156,66 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             )
             return
 
-        preset_name = self.preset_dropdown.get()
-        engine = self.get_selected_engine()
-        crf_val = int(self.crf_slider.get()) if preset_name != AUDIO_ONLY_PRESET else None
-        two_pass = self.two_pass_cb.get()
-        bit10 = self.bit10_cb.get()
-        fps_cap = 30 if self.fps30_cb.get() else None
-        av1_preset = int(self.av1_slider.get()) if "AV1" in preset_name else None
+        # Each file compresses with its OWN settings. All checks below are
+        # therefore per file, not based on the sidebar.
 
-        # GPU engine honesty check: never silently pretend to GPU-encode
-        if engine == "gpu":
+        # GPU engine honesty: never silently pretend to GPU-encode
+        gpu_tasks = [t for t in selected if t.engine == "gpu"]
+        if gpu_tasks:
             hardware = detect_active_hardware_webm_encoders()
             if not any(hardware.values()):
                 proceed = messagebox.askyesno(
                     "GPU WebM Encoding Not Available",
-                    "This system has no working GPU WebM encoder (VP9/AV1).\n\n"
-                    "Continue in Auto mode instead? Auto will use Hybrid "
-                    "(GPU decode + CPU encode) when possible, otherwise CPU.\n\n"
+                    f"{len(gpu_tasks)} video(s) are set to the GPU engine, but this "
+                    "system has no working GPU WebM encoder (VP9/AV1).\n\n"
+                    "Switch those files to Auto? Auto uses Hybrid (GPU decode + "
+                    "CPU encode) when possible, otherwise CPU.\n\n"
                     "No = cancel and change settings."
                 )
                 if not proceed:
                     return
-                engine = "auto"
-                self.unit_toggle.set("Auto")
+                for t in gpu_tasks:
+                    t.engine = "auto"
+                    t.resolved_engine = None
 
-        # Warn when 10-bit is enabled but every source is 8-bit: it only makes
-        # the encode slower and larger with no possible quality gain.
-        if bit10:
-            eight_bit = [t for t in selected
-                         if (t.metadata.get("pix_fmt") or "") and "10" not in t.metadata.get("pix_fmt", "")]
-            if eight_bit and len(eight_bit) == len(selected):
-                proceed = messagebox.askyesno(
-                    "10-bit Not Needed",
-                    "Your selected video(s) are 8-bit. Enabling 10-bit colour will "
-                    "make the encode SLOWER and the file LARGER with no quality "
-                    "benefit, because there is no 10-bit detail to keep.\n\n"
-                    "Turn off 10-bit and continue? (No = keep 10-bit anyway)"
-                )
-                if proceed:
-                    bit10 = False
-                    self.bit10_cb.deselect()
-
-        # Warn on the slow-combo trap that makes big files look frozen: Two-Pass
-        # on a large source runs an invisible whole-video analysis pass first.
-        big = [t for t in selected if t.metadata.get("size_bytes", 0) > 1_500_000_000]
-        if two_pass and big:
+        # Warn when 10-bit is enabled on 8-bit sources: slower and larger
+        # output with no possible quality gain.
+        bad10 = [t for t in selected
+                 if t.bit10 and (t.metadata.get("pix_fmt") or "")
+                 and "10" not in t.metadata.get("pix_fmt", "")]
+        if bad10:
+            names = "\n".join(f"  -  {os.path.basename(t.input_path)}" for t in bad10[:5])
             proceed = messagebox.askyesno(
-                "Two-Pass Will Be Slow",
-                "Two-Pass is on and a large file is selected. Pass 1 analyses the "
-                "whole video before writing anything, so it can run a long time "
-                "showing little progress, and roughly doubles total encode time for "
-                "a small quality gain.\n\n"
-                "Turn OFF Two-Pass for a much faster single-pass encode? "
-                "(No = keep Two-Pass)"
+                "10-bit Not Needed",
+                f"These video(s) are 8-bit but have 10-bit colour enabled:\n\n{names}\n\n"
+                "10-bit makes the encode SLOWER and the file LARGER with no "
+                "quality benefit on 8-bit sources.\n\n"
+                "Turn off 10-bit for these files and continue? (No = keep 10-bit)"
             )
             if proceed:
-                two_pass = False
-                self.two_pass_cb.deselect()
+                for t in bad10:
+                    t.bit10 = False
 
-        # Rule 3: warn when an input is already compressed below what this
-        # preset typically produces (re-encoding it usually makes it larger).
-        risky = []
-        for t in selected:
-            in_bps = t.metadata.get("bitrate", 0)
-            expected = estimate_typical_output_bitrate(
-                preset_name, crf_val, t.metadata.get("height", 1080)
+        # Two-pass on very large sources: honest slow-combo warning, per file
+        big = [t for t in selected
+               if t.two_pass and t.metadata.get("size_bytes", 0) > 1_500_000_000]
+        if big:
+            names = "\n".join(f"  -  {os.path.basename(t.input_path)}" for t in big[:5])
+            proceed = messagebox.askyesno(
+                "Two-Pass Will Be Slow",
+                f"Two-Pass is enabled on large file(s):\n\n{names}\n\n"
+                "Pass 1 analyses the whole video before encoding, roughly "
+                "doubling total time for a small quality gain.\n\n"
+                "Turn OFF Two-Pass for these files? (No = keep Two-Pass)"
             )
-            if in_bps and expected and in_bps < expected * 0.8:
-                risky.append(os.path.basename(t.input_path))
+            if proceed:
+                for t in big:
+                    t.two_pass = False
+
+        # Warn when an input is already compressed below what ITS OWN settings
+        # typically produce (re-encoding usually makes it larger).
+        risky = [os.path.basename(t.input_path) for t in selected
+                 if self._is_already_compressed(t)]
         if risky:
             listing = "\n".join(f"  -  {n}" for n in risky[:5])
             if len(risky) > 5:
@@ -1930,7 +2224,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                 "Already Heavily Compressed",
                 "These videos are already compressed to a very low bitrate:\n\n"
                 f"{listing}\n\n"
-                "At the current quality setting the WebM output will likely be "
+                "At their current quality settings the WebM output will likely be "
                 "SIMILAR OR LARGER than the original. A lower quality or the "
                 "Small Size preset may help, but there may be nothing left to save.\n\n"
                 "Compress anyway?"
@@ -1939,19 +2233,94 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
                 return
 
         for task in selected:
-            task.preset_name = preset_name
-            task.engine = engine
-            task.use_gpu = engine != "cpu"
             task.resolved_engine = None
-            task.crf_override = crf_val
-            task.two_pass = two_pass
-            task.bit10 = bit10
-            task.fps_cap = fps_cap
-            task.av1_preset = av1_preset
             task.output_path = self.get_unique_output_path(out_dir, os.path.basename(task.input_path), ".webm")
 
         self.on_queue_update()
+        if self.selected_task_id:
+            self.deselect_task()
 
+        # Destination preflight (free space, writability, path length) runs in
+        # the background; the run starts from _finish_preflight.
+        self.btn_start.configure(state="disabled", text="Checking destination…")
+
+        def preflight_worker():
+            report = self._run_preflight(selected, out_dir)
+            self.after(0, lambda: self._finish_preflight(selected, report, out_dir))
+
+        threading.Thread(target=preflight_worker, daemon=True).start()
+
+    def _run_preflight(self, selected, out_dir):
+        """Destination safety checks. Runs off the UI thread (network drives
+        can be slow); returns a plain report dict."""
+        from encoder import estimate_task_output_bytes
+        report = {"writable": True, "write_err": "", "free": -1,
+                  "needed": 0, "long_paths": 0}
+        try:
+            probe = os.path.join(out_dir, f".webm_write_test_{os.getpid()}.tmp")
+            with open(probe, "wb") as f:
+                f.write(b"x")
+            os.remove(probe)
+        except Exception as e:
+            report["writable"] = False
+            report["write_err"] = str(e)
+        try:
+            report["free"] = shutil.disk_usage(out_dir).free
+        except Exception:
+            report["free"] = -1
+        try:
+            report["needed"] = sum(estimate_task_output_bytes(t) for t in selected)
+        except Exception:
+            report["needed"] = 0
+        report["long_paths"] = sum(
+            1 for t in selected if len(os.path.abspath(t.output_path)) > 240)
+        return report
+
+    def _finish_preflight(self, selected, report, out_dir):
+        if not report["writable"]:
+            messagebox.showerror(
+                "Destination Not Writable",
+                f"The destination folder cannot be written to:\n{out_dir}\n\n"
+                f"{report['write_err']}\n\n"
+                "Check that the drive is connected, not read-only, and that "
+                "you have permission, or choose a different folder."
+            )
+            self.refresh_start_button()
+            return
+
+        if report["long_paths"]:
+            proceed = messagebox.askyesno(
+                "Very Long File Path",
+                f"{report['long_paths']} output path(s) exceed 240 characters, "
+                "which can fail on Windows.\n\n"
+                "Continue anyway? (Choosing a shorter destination folder avoids this.)"
+            )
+            if not proceed:
+                self.refresh_start_button()
+                return
+
+        if report["free"] >= 0 and report["needed"] > report["free"]:
+            from dialogs import ask_choice3
+            choice = ask_choice3(
+                "Not Enough Disk Space",
+                f"Estimated output needs approximately "
+                f"{self._format_size(report['needed'])}, but only "
+                f"{self._format_size(report['free'])} is available in the "
+                "selected destination folder.\n\n"
+                "Estimates include a safety margin; the real output may be smaller.",
+                "Choose Another Folder…", "Continue Anyway"
+            )
+            if choice == "Choose Another Folder…":
+                self.refresh_start_button()
+                self.browse_output_dir()
+                return
+            if choice == "Cancel":
+                self.refresh_start_button()
+                return
+
+        self._begin_queue_run(selected)
+
+    def _begin_queue_run(self, selected):
         n = len(selected)
         label = "Compressing 1 video…" if n == 1 else f"Compressing {n} videos…"
         self.btn_start.configure(state="disabled", text=label)
@@ -1964,7 +2333,8 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self.bit10_cb.configure(state="disabled")
         self.output_entry.configure(state="disabled")
         self.unit_toggle.configure(state="disabled")
-        
+        self.apply_all_btn.configure(state="disabled")
+
         self.queue.start()
 
     def stop_conversion(self):
@@ -1988,9 +2358,15 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         self.bit10_cb.configure(state="normal")
         self.output_entry.configure(state="normal")
+        self.apply_all_btn.configure(state="normal")
         self.on_queue_update()
 
     def destroy(self):
+        # Persist the queue with its per-file settings for the next session
+        try:
+            self._save_queue_state()
+        except Exception:
+            pass
         # Never leave a suspended FFmpeg process behind: resume + terminate
         try:
             self.queue.stop()
@@ -2040,6 +2416,7 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
         self.bit10_cb.configure(state="normal")
         self.output_entry.configure(state="normal")
+        self.apply_all_btn.configure(state="normal")
         self._safe_ui_update()
         messagebox.showinfo("Done", "All video compression jobs completed successfully.")
 

@@ -1016,10 +1016,75 @@ class EncoderTask:
         self.hw_proof = []       # captured FFmpeg log lines proving HW activity
         self.est_size_bytes = 0
         self.error_msg = ""
+        # Per-file extension point: future options (LUT, crop, resize,
+        # subtitles, metadata, output overrides, audio settings) live here so
+        # new features never require a schema change.
+        self.extras = {}
         if metadata_override:
             self.metadata = metadata_override
         else:
             self.metadata = get_metadata(input_path)
+
+    def to_dict(self):
+        """Serializable snapshot of the task's identity and settings."""
+        return {
+            "input_path": self.input_path,
+            "output_path": self.output_path,
+            "preset_name": self.preset_name,
+            "engine": self.engine,
+            "crf_override": self.crf_override,
+            "two_pass": bool(self.two_pass),
+            "bit10": bool(self.bit10),
+            "av1_preset": self.av1_preset,
+            "fps_cap": self.fps_cap,
+            "selected": bool(self.selected),
+            "extras": dict(self.extras),
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, task_id, data):
+        """
+        Rebuilds a task from to_dict() output. Status always restarts at
+        Pending; saved metadata is reused to avoid re-probing every file.
+        """
+        task = cls(
+            task_id,
+            data.get("input_path", ""),
+            data.get("output_path", ""),
+            data.get("preset_name", ""),
+            crf_override=data.get("crf_override"),
+            two_pass=data.get("two_pass", False),
+            bit10=data.get("bit10", False),
+            av1_preset=data.get("av1_preset"),
+            metadata_override=data.get("metadata") or None,
+            engine=data.get("engine"),
+            fps_cap=data.get("fps_cap"),
+        )
+        task.selected = bool(data.get("selected", True))
+        task.extras = dict(data.get("extras", {}))
+        return task
+
+
+def estimate_task_output_bytes(task):
+    """
+    Rough expected output size in bytes for a task with ITS OWN settings,
+    used by the destination free-space preflight. Includes a 15% safety
+    margin; audio-only presets are estimated from the Opus bitrate.
+    """
+    meta = task.metadata
+    duration = meta.get("duration", 0.0) or 0.0
+    preset = PRESETS.get(task.preset_name)
+    if not preset or duration <= 0:
+        return 0
+    if preset.get("codec") is None:
+        bps = 64_000  # Audio Only preset target bitrate
+    else:
+        bps = estimate_typical_output_bitrate(
+            task.preset_name, task.crf_override, meta.get("height", 1080)
+        )
+        bps += 96_000  # audio track
+    return int(duration * bps / 8 * 1.15)
 
 class EncodingQueue:
     def __init__(self, callback_on_update=None, callback_on_finish=None):
