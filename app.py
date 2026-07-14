@@ -429,9 +429,6 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         # so the rounded shell's corners show the desktop through them.
         self._is_maximized = False
         self._frameless_suspended = False  # non-Windows minimize bookkeeping
-        # Hide until fully built and de-captioned: the window appears complete
-        # instead of flashing a native title bar and half-built widgets.
-        self.withdraw()
         if sys.platform != "win32":
             self.overrideredirect(True)  # non-Windows keeps the old behavior
         self.configure(fg_color="#010101")
@@ -469,11 +466,12 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
         self._build_resize_grip()
         self._setup_drag_and_drop()
 
-        # Strip the caption, then show the finished window. Re-assert the style
-        # on every map in case Tk reapplies its defaults after a state change.
-        self.update_idletasks()
-        self._apply_borderless_style()
-        self.deiconify()
+        # Strip the caption shortly after the window maps naturally (never
+        # withdraw/deiconify manually - CTk tracks window state itself and a
+        # manual withdraw can leave the window permanently unmapped). Re-assert
+        # the style on every map in case Tk reapplies defaults after a state
+        # change.
+        self.after(20, self._apply_borderless_style)
         self.bind("<Map>", self._on_map, add="+")
 
         self._check_ffmpeg()
@@ -540,11 +538,11 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
 
     def _apply_borderless_style(self):
         """
-        Remove the native title bar while KEEPING the native frame bits
-        (thickframe + min/max boxes). The window remains managed by Windows,
-        so minimize/restore use the real DWM animations, the taskbar button
-        exists natively, and no overrideredirect flicker dance is needed.
-        Idempotent; safe to call repeatedly.
+        Remove the native title bar AND the native sizing frame (the thickframe
+        painted a rectangular outline over the rounded corners), keeping the
+        min/max boxes. The window remains managed by Windows, so minimize and
+        restore use the real DWM animations and the taskbar button exists
+        natively - no overrideredirect flicker dance. Idempotent.
         """
         if sys.platform != "win32":
             return
@@ -564,7 +562,8 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             u32 = ctypes.windll.user32
             hwnd = u32.GetParent(self.winfo_id()) or self.winfo_id()
             style = u32.GetWindowLongW(hwnd, GWL_STYLE)
-            new_style = (style & ~WS_CAPTION) | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU
+            new_style = ((style & ~WS_CAPTION & ~WS_THICKFRAME)
+                         | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU)
             if new_style != style:
                 u32.SetWindowLongW(hwnd, GWL_STYLE, new_style)
                 u32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
