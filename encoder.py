@@ -249,11 +249,14 @@ def detect_active_hardware_webm_encoders():
 
     for enc in list(supported.keys()):
         if enc in out:
+            # 256x256 test frame: hardware encoders have MINIMUM frame sizes
+            # (NVENC H.264 needs >=145px width since Turing, AV1 more), so a
+            # tiny probe frame falsely reports capable GPUs as unsupported.
             cmd = [
-                ffmpeg_bin, "-y", 
-                "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1",
+                ffmpeg_bin, "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
                 "-vframes", "1",
-                "-c:v", enc, 
+                "-c:v", enc,
                 "-f", "null", "-"
             ]
             try:
@@ -424,15 +427,30 @@ def gpu_diagnostics():
     # 4. FFmpeg WebM-capable hardware encoders compiled + actually working
     active = detect_active_hardware_webm_encoders()
     working = [k for k, v in active.items() if v]
-    checks.append(("GPU WebM encoders (working)", bool(working),
-                   ", ".join(working) if working
-                   else "none - NVIDIA VP9 encode does not exist; AV1 needs RTX 40+/Arc"))
+    if working:
+        enc_detail = ("available: " + ", ".join(working)
+                      + " - true hardware WebM encoding (AV1/VP9)")
+    else:
+        enc_detail = ("not available on this GPU. No NVIDIA card can encode "
+                      "VP9; hardware AV1 needs RTX 40+ (Ada), Intel Arc/Xe or "
+                      "AMD RX 7000+. This is a hardware limit, not an app bug.")
+    checks.append(("GPU WebM encoding", bool(working), enc_detail))
 
     # 5. Hardware decode (hybrid mode feed)
     dec = is_hw_decode_available()
-    checks.append(("GPU decode (hybrid mode)", dec,
-                   "available - hybrid GPU decode + CPU encode possible" if dec
-                   else "unavailable - pure CPU pipeline"))
+    checks.append(("GPU video decoding (NVDEC/VAAPI/QSV)", dec,
+                   "available - GPU can decode and scale while the CPU encodes"
+                   if dec else "unavailable - pure CPU pipeline"))
+
+    # 6. Plain-language recommendation
+    if working:
+        rec = "GPU (or Auto) - this card hardware-encodes WebM directly"
+    elif dec:
+        rec = ("Hybrid (or Auto) - GPU decodes and scales, CPU encodes WebM. "
+               "Best real mode for this card")
+    else:
+        rec = "CPU - no usable GPU acceleration on this system"
+    checks.append(("Recommended engine", True, rec))
 
     return checks
 

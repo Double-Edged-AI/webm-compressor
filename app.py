@@ -1064,20 +1064,29 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
     def _apply_gpu_status(self, active_gpus, decode_ok):
         """Truthful sidebar capability line: encode, decode and hybrid state."""
         if active_gpus:
-            gpu_text = (f"• GPU WebM encode: {', '.join(active_gpus)}\n"
-                        f"• Pipeline: Zero-Copy HW")
+            gpu_text = (f"• GPU WebM encode: {', '.join(active_gpus)} ✓\n"
+                        f"• Recommended engine: GPU or Auto")
+            hint = "Auto: this GPU hardware-encodes WebM (AV1) directly"
         elif decode_ok:
             gpu_text = ("• GPU WebM encode: none on this GPU\n"
-                        "• GPU decode: OK -> Hybrid mode ready")
+                        "• GPU decode: OK -> Recommended: Hybrid or Auto")
+            hint = "Auto: will use Hybrid (GPU decode + CPU encode) on 1080p+"
         else:
             gpu_text = ("• GPU acceleration: not available\n"
-                        "• Pipeline: Software MT (CPU)")
+                        "• Recommended engine: CPU")
+            hint = "Auto: CPU only (no usable GPU acceleration found)"
         self.spec_details.configure(text=(
             f"• OS Platform: {sys.platform.upper()}\n"
             f"• VP9 Row-MT: Active (ssim)\n"
             f"• AV1 Tiling: SVT-AV1 P7\n"
             f"{gpu_text}"
         ))
+        # Refresh the engine hint with what Auto will REALLY do on this machine
+        try:
+            if self.get_selected_engine() == "auto":
+                self.engine_hint.configure(text=hint)
+        except Exception:
+            pass
 
     def show_system_info(self):
         from dialogs import themed_toplevel

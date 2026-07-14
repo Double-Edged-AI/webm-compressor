@@ -16,6 +16,11 @@ and this project uses [semantic versioning](https://semver.org/).
 
 ### Changed
 - Start-time warnings (10-bit on 8-bit sources, two-pass on large files, already-compressed inputs, GPU honesty) are now evaluated per file against that file's own settings.
+- Queue rows can be reordered with per-row up/down arrows or Ctrl+Up/Down on the selected row; encode order follows queue order.
+- System Details diagnostics now explain WHY GPU WebM encoding is or is not available and recommend the best engine for the detected hardware.
+
+### Fixed
+- GPU AV1 encoder detection: the capability probe encoded a 64x64 test frame, below NVENC's minimum supported frame size, so real hardware AV1 encoders (RTX 40-series, Intel Arc, AMD RX 7000) were never detected. The probe now uses a 256x256 frame.
 
 ## [1.1.0] - 2026-07-14
 
