@@ -702,10 +702,20 @@ class WebMCompressorApp(ctk.CTk, _DnDBase):
             self._is_maximized = True
 
     def _build_resize_grip(self):
-        grip = ctk.CTkLabel(
-            self.shell, text="◢",
-            font=ctk.CTkFont(size=13), text_color="#3A3A48", cursor="size_nw_se"
-        )
+        # Cursor names are platform-specific: "size_nw_se" exists only on
+        # Windows; X11 (Ubuntu) calls it "bottom_right_corner". Fall back to
+        # the default cursor rather than crash on unknown names.
+        cursor = "size_nw_se" if sys.platform == "win32" else "bottom_right_corner"
+        try:
+            grip = ctk.CTkLabel(
+                self.shell, text="◢",
+                font=ctk.CTkFont(size=13), text_color="#3A3A48", cursor=cursor
+            )
+        except Exception:
+            grip = ctk.CTkLabel(
+                self.shell, text="◢",
+                font=ctk.CTkFont(size=13), text_color="#3A3A48"
+            )
         grip.place(relx=1.0, rely=1.0, anchor="se", x=-7, y=-5)
         grip.bind("<B1-Motion>", self._resize_move)
 
